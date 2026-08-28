@@ -135,7 +135,3 @@ const BayanihanAPI = (() => {
     },
   };
 })();
-
-/*
-asdasd
-*/ 
