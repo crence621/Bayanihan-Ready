@@ -1,26 +1,3 @@
-/* ============================================================================
-   BayanihanAPI
-   ----------------------------------------------------------------------------
-   This is a MOCK data layer. Every method below returns a Promise, matches
-   the shape a real backend response would have, and keeps all "server" state
-   in memory only (nothing is written to disk/localStorage).
-
-   TO CONNECT A REAL BACKEND LATER:
-     1. Keep the same method names and return shapes used by app.js.
-     2. Inside each method, replace the mock logic with a `fetch()` call to
-        your real endpoint (examples are commented inline below).
-     3. app.js does not need to change at all if the response shape matches.
-
-   Suggested REST endpoints for a real backend:
-     POST   /api/auth/signup        { name, email, password }
-     POST   /api/auth/login         { email, password }
-     POST   /api/auth/logout
-     POST   /api/users/location     { lat, lng }
-     GET    /api/responders/nearby  ?lat=&lng=
-     POST   /api/incidents          { type, lat, lng, notes }
-     GET    /api/incidents/mine
-   ============================================================================ */
-
 const BayanihanAPI = (() => {
 
   // In-memory "database" — replaced by a real DB once a backend exists.
