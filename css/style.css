@@ -211,7 +211,7 @@ body{
   color:var(--ink);
   outline:none;
 }
-.field:nth-of-type(2) input, .field:nth-of-type(3) input{ padding-left:38px; }
+.input-icon + input { padding-left: 38px; }
 .field input:focus{ border-color:var(--violet); }
 
 .btn-primary{
