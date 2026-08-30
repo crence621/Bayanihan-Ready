@@ -6,22 +6,20 @@
 <title>Bayanihan Ready</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="!css/style.css">
 </head>
 <body>
 
 <div class="phone">
 
-
-  <!-- SCREEN 1 — OPENING                                            -->
-
+  <!-- SCREEN 1 — OPENING -->
   <section class="screen is-active" data-screen="opening">
     <div class="dev-tag">Opening <span>1</span></div>
-    <img class="map-bg" src="assets/manila-map.jpg" alt="" aria-hidden="true">
+    <img class="map-bg" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
     <div class="opening-body">
       <div class="badge">
-        <img src="assets/first-aid.png" alt="Bayanihan Ready logo">
+        <img src="!assets/!images/first-aid.png" alt="Bayanihan Ready logo">
       </div>
       <h1 class="wordmark">Bayanihan Ready</h1>
       <p class="tagline">Community first. Always ready.</p>
@@ -30,9 +28,7 @@
     <button class="tap-continue" data-goto="signup" aria-label="Continue">Tap to continue</button>
   </section>
 
-
-  <!-- SCREEN 2 — SIGN UP                                            -->
-
+  <!-- SCREEN 2 — SIGN UP -->
   <section class="screen" data-screen="signup">
     <div class="dev-tag">Sign up <span>2</span></div>
 
@@ -46,7 +42,7 @@
         </span>
       </div>
 
-      <img class="card-map" src="assets/manila-map.jpg" alt="" aria-hidden="true">
+      <img class="card-map" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
       <form class="auth-form" id="signup-form" novalidate>
         <h1>Let's sign you up<span class="dot">.</span></h1>
@@ -84,9 +80,7 @@
     </div>
   </section>
 
-
-  <!-- SCREEN 3 — LOGIN                                              -->
-
+  <!-- SCREEN 3 — LOGIN -->
   <section class="screen" data-screen="login">
     <div class="dev-tag">Login</div>
 
@@ -100,7 +94,7 @@
         </span>
       </div>
 
-      <img class="card-map" src="assets/manila-map.jpg" alt="" aria-hidden="true">
+      <img class="card-map" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
       <form class="auth-form" id="login-form" novalidate>
         <h1>Let's sign you in<span class="dot">.</span></h1>
@@ -144,9 +138,7 @@
     </div>
   </section>
 
-
-  <!-- SCREEN 4 — LOCATION                                           -->
-
+  <!-- SCREEN 4 — LOCATION -->
   <section class="screen" data-screen="location">
     <div class="dev-tag">Location</div>
 
@@ -160,7 +152,7 @@
         </span>
       </div>
 
-      <img class="card-map" src="assets/manila-map.jpg" alt="" aria-hidden="true">
+      <img class="card-map" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
       <div class="location-body">
         <div class="pin">
@@ -182,9 +174,7 @@
     </div>
   </section>
 
-
-  <!-- SCREEN 5 — HOME                                               -->
-
+  <!-- SCREEN 5 — HOME -->
   <section class="screen" data-screen="home">
     <div class="dev-tag">Home</div>
 
@@ -212,11 +202,11 @@
       <!-- HOME TAB -->
       <div class="tab-panel is-active" data-tab="home">
         <div class="map-panel">
-          <img class="card-map full" src="assets/manila-map.jpg" alt="" aria-hidden="true">
+          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
           <p class="help-copy">Help is just a click away!<br>Click <b>SOS button</b> to call the help.</p>
           <p class="coords" id="home-coords" hidden></p>
 
-          <button class="sos-btn" id="sos-btn">
+          <button class="sos-btn" id="sos-btn" data-goto="report-emergency">
             <span class="ring r1"></span>
             <span class="ring r2"></span>
             <span class="sos-core">SOS</span>
@@ -237,7 +227,7 @@
       <!-- MAPS TAB -->
       <div class="tab-panel" data-tab="maps">
         <div class="map-panel">
-          <img class="card-map full" src="assets/manila-map.jpg" alt="" aria-hidden="true">
+          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
           <div class="panel-inner floating">
             <h3>Nearby Responders</h3>
             <ul class="responder-list" id="responder-list"></ul>
@@ -293,9 +283,218 @@
     </div>
   </section>
 
+  <!-- SCREEN 6 — REPORT EMERGENCY -->
+  <section class="screen" data-screen="report-emergency">
+    <div class="dev-tag">Report Emergency</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Report Emergency</h2>
+      </div>
+
+      <div class="report-body">
+        <!-- EMERGENCY TYPES GRID -->
+        <p class="section-title">Select Emergency type</p>
+        <div class="type-grid">
+          <button class="type-card is-selected" type="button" data-type="Flood">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Flood.png" alt="Flood"></span>
+            <span>Flood</span>
+          </button>
+          <button class="type-card" type="button" data-type="Fire">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Fire.png" alt="Fire"></span>
+            <span>Fire</span>
+          </button>
+          <button class="type-card" type="button" data-type="Medical">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Medical.png" alt="Medical"></span>
+            <span>Medical</span>
+          </button>
+          <button class="type-card" type="button" data-type="Accident">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Accident.png" alt="Accident"></span>
+            <span>Accident</span>
+          </button>
+          <button class="type-card" type="button" data-type="Quake">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Quake.png" alt="Quake"></span>
+            <span>Quake</span>
+          </button>
+          <button class="type-card" type="button" data-type="Robbery">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Robbery.png" alt="Robbery"></span>
+            <span>Robbery</span>
+          </button>
+          <button class="type-card" type="button" data-type="Assault">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Assault.png" alt="Assault"></span>
+            <span>Assault</span>
+          </button>
+          <button class="type-card" type="button" data-type="Other">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Other.png" alt="Other"></span>
+            <span>Other</span>
+          </button>
+        </div>
+
+        <!-- LOCATION WITH ICON -->
+        <p class="section-title">Location</p>
+        <div class="location-card-box">
+          <div class="loc-text">
+            <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
+            <span id="report-loc-text">6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+          </div>
+          <button class="change-link" type="button" id="btn-change-location">Change</button>
+        </div>
+
+        <!-- PROOF BUTTONS WITH ICONS -->
+        <p class="section-title">Attach proof</p>
+        <div class="proof-grid">
+          <button class="proof-btn" id="btn-proof-photo" type="button">
+            <img src="!assets/!buttons/Camera.png" alt="Camera">
+            <span>Click<br>Pictures</span>
+          </button>
+          <button class="proof-btn" id="btn-proof-video" type="button">
+            <img src="!assets/!buttons/Vid.png" alt="Video">
+            <span>Video<br>Recording</span>
+          </button>
+          <button class="proof-btn" id="btn-proof-audio" type="button">
+            <img src="!assets/!buttons/Mic.png" alt="Voice">
+            <span>Voice<br>Recording</span>
+          </button>
+        </div>
+        <input type="file" id="proof-file-input" accept="image/*,video/*,audio/*" style="display:none">
+        <div id="proof-preview-container" class="proof-preview-container"></div>
+
+        <!-- BRIEF NOTES -->
+        <div class="input-card-box" style="margin-top: 4px;">
+          <input type="text" id="report-notes" placeholder="Specify emergency in brief...">
+        </div>
+
+        <button type="button" class="btn-primary-red" id="btn-submit-report">Submit Report</button>
+      </div>
+
+      <!-- SELECT LOCATION BOTTOM SHEET -->
+      <div class="sheet-overlay" id="location-sheet-overlay">
+        <div class="sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <button class="back-btn" id="location-sheet-back" aria-label="Back">←</button>
+            <h3>Select Location</h3>
+          </div>
+
+          <label class="sheet-search">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m18 18-3.8-3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input type="text" id="location-search-input" placeholder="Search Address">
+          </label>
+
+          <div class="mini-map">
+            <span class="mini-map-you-here">You are here</span>
+            <span class="mini-map-pin"></span>
+            <button class="track-location-pill" type="button" id="track-location-btn">
+              <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
+              Track my location
+            </button>
+          </div>
+
+          <div class="mini-map-address">
+            <img src="!assets/!buttons/Pin.png" alt="">
+            <span>Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+          </div>
+
+          <div class="sheet-fields">
+            <input type="text" id="loc-house-input" placeholder="House Number/Building, Flr (Optional)">
+            <input type="text" id="loc-street-input" class="is-focused" value="Buenavista-Lawaan Rd., Balangiga">
+            <input type="text" id="loc-city-input" value="Eastern Samar">
+          </div>
+
+          <button type="button" class="btn-primary-red" id="confirm-location-btn">Confirm Location</button>
+        </div>
+      </div>
+
+      <!-- SUCCESS MODAL -->
+      <div class="modal-overlay" id="success-overlay">
+        <div class="success-modal">
+          <button class="success-close" id="success-close" aria-label="Close">✕</button>
+          <img class="success-check" src="!assets/!images/Group_94.png" alt="">
+          <h3>Help is on the way.</h3>
+          <p>Read the tips to avoid any further risks.</p>
+          <button type="button" class="btn-primary-red" id="read-instructions-btn">Read Instructions</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 7 — CAMERA -->
+  <section class="screen" data-screen="camera">
+    <div class="dev-tag">Camera</div>
+    <div class="camera-view">
+      <div class="camera-topbar">
+        <button class="camera-close" id="camera-close" aria-label="Close camera">✕</button>
+        <div class="camera-topicons">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.3"/><path d="M10 1.6v2M10 16.4v2M1.6 10h2M16.4 10h2M4 4l1.4 1.4M14.6 14.6 16 16M16 4l-1.4 1.4M5.4 14.6 4 16" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2 3 12h5l-1 6 8-10h-5l1-6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none"><path d="M4 4a8 8 0 1 1-1.6 6.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M2 2v4.4h4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <div class="camera-preview">
+        <img class="camera-feed" src="!assets/!images/image_20.png" alt="Camera preview">
+        <img class="capture-flash" id="capture-flash" src="!assets/!images/Frame_3502.png" alt="">
+      </div>
+
+      <div class="camera-modes">
+        <span>Studio</span>
+        <span>Portrait</span>
+        <span class="is-active">Photo</span>
+        <span>Video</span>
+        <span>AI Cam</span>
+      </div>
+
+      <div class="camera-controls">
+        <button class="camera-lock" type="button" aria-label="Lock exposure">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M5 7V4.6a3 3 0 0 1 6 0V7" stroke="currentColor" stroke-width="1.3"/></svg>
+        </button>
+        <button class="shutter-btn" id="shutter-btn" type="button" aria-label="Take photo"></button>
+        <button class="camera-flip" type="button" aria-label="Flip camera">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M2 5a6 6 0 0 1 10-2.2M2 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a6 6 0 0 1-10 2.2M14 14v-3h-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="camera-handle"></div>
+    </div>
+  </section>
+
+  <!-- SCREEN 8 — NOTIFICATIONS -->
+  <section class="screen" data-screen="notifications">
+    <div class="dev-tag">Notifications</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Notifications</h2>
+      </div>
+
+      <div class="notif-body" id="notif-list"></div>
+    </div>
+  </section>
+
 </div>
 
-<script src="js/api.js"></script>
-<script src="js/app.js"></script>
+<script src="!js/api.js"></script>
+<script src="!js/app.js"></script>
 </body>
 </html>
