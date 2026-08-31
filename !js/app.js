@@ -87,7 +87,7 @@
   // Social buttons are placeholders — wired for whenever real OAuth exists.
   document.querySelectorAll('.social').forEach((btn) => {
     btn.addEventListener('click', () => {
-      alert(`Sign-in with ${btn.dataset.provider} isn't connected yet — hook this up once a backend + OAuth app exist.`);
+      alert(`Sign-in with ${btn.dataset.provider} isn't connected yet, backend + OAuth app doesnt exist.`);
     });
   });
 
@@ -123,7 +123,7 @@
       () => {
         allowLocationBtn.disabled = false;
         allowLocationBtn.textContent = 'Allow';
-        setError(locationError, 'Permission denied — you can still continue and enable this later.');
+        setError(locationError, 'Permission denied.');
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
@@ -381,7 +381,7 @@
   const accountVerifyBtn = document.getElementById('account-verify-email');
   if (accountVerifyBtn) {
     accountVerifyBtn.addEventListener('click', () => {
-      alert('Verification isn\u2019t connected yet — hook this up once a backend + email provider exist.');
+      alert('Verification isn\u2019t connected yet, hook this shi up once a backend + email provider exist.');
     });
   }
 
@@ -419,7 +419,7 @@
   const sosChangeContactBtn = document.getElementById('btn-sos-change-contact');
   if (sosChangeContactBtn) {
     sosChangeContactBtn.addEventListener('click', () => {
-      alert('Contact picker isn\u2019t connected yet — hook this up once a backend + contacts permission exist.');
+      alert('Contact picker isn\u2019t connected yet. continue this up once a backend + contacts permission exist.');
     });
   }
 
@@ -434,7 +434,7 @@
   /* -------------------------------- SETTINGS -------------------------------- */
   document.querySelectorAll('[data-settings-alert]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      alert(`${btn.dataset.settingsAlert} isn\u2019t connected yet — hook this up once a backend exists.`);
+      alert(`${btn.dataset.settingsAlert} isn\u2019t connected yet. hook this shi up once a backend exists now.`);
     });
   });
 
@@ -445,3 +445,4 @@
     if (opening.classList.contains('is-active')) showScreen('signup');
   }, 3500);
 })();
+
