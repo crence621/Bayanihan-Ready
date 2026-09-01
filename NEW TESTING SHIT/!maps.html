@@ -1,0 +1,22 @@
+<!--
+  !maps.html
+  Nearby Responders (Maps tab), cut from the Home screen's tab-panel set.
+  Originally <div class="tab-panel" data-tab="maps"> inside
+  <section data-screen="home"> in index.html.
+  Styles: !maps.css (.responder-list, .dot-status) -- .responder-list and
+  .map-panel are also used elsewhere (Emergencies tab, Home tab), so keep
+  style.css's shared copies too.
+  Depends on: !style.css, !app.js (tab-switching), !api.js (nearby responders data)
+-->
+
+
+      <!-- MAPS TAB -->
+      <div class="tab-panel" data-tab="maps">
+        <div class="map-panel">
+          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
+          <div class="panel-inner floating">
+            <h3>Nearby Responders</h3>
+            <ul class="responder-list" id="responder-list"></ul>
+          </div>
+        </div>
+      </div>

@@ -1,0 +1,5 @@
+/* !account.css
+   Account Details has no CSS block of its own in the original style.css --
+   it reuses the shared "settings-style" rules (settings-body, settings-field,
+   settings-input-wrap, settings-verify, settings-check, etc.) that were moved
+   into !sos.css. Include !sos.css wherever !account.html renders. */

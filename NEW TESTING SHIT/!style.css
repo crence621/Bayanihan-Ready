@@ -1,0 +1,597 @@
+:root{
+  --red:#E5342E;
+  --red-dark:#C4241F;
+  --maroon:#7A1F22;
+  --tagline:#E9A6A3;
+  --violet:#6C5CE7;
+  --ink:#17181A;
+  --gray:#8A8D93;
+  --line:#ECEAE6;
+  --paper:#FFFFFF;
+
+  --font-word:'Playfair Display', serif;
+  --font-head:'Poppins', sans-serif;
+  --font-body:'Inter', sans-serif;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+
+body{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#EFEEEC;
+  font-family:var(--font-body);
+  padding:32px 16px;
+  color:var(--ink);
+}
+
+/* ---------- phone shell ---------- */
+.phone{
+  position:relative;
+  width:340px;
+  height:696px;
+  max-width:100%;
+  border-radius:34px;
+  overflow:hidden;
+  box-shadow:0 24px 60px rgba(0,0,0,.22), 0 0 0 8px #0b0b0c;
+  background:var(--paper);
+}
+
+.dev-tag{
+  position:absolute;
+  top:-26px; left:2px;
+  font-family:var(--font-body);
+  font-size:12px;
+  color:#B9B7B2;
+  z-index:20;
+}
+.dev-tag span{
+  margin-left:4px;
+  opacity:.7;
+}
+
+/* ---------- screens ---------- */
+.screen{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .3s ease;
+  background:var(--paper);
+}
+.screen.is-active{ opacity:1; pointer-events:auto; }
+
+/* ---------- shared: faint map watermark ---------- */
+.map-bg, .card-map{
+  position:absolute;
+  inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  filter:grayscale(1) contrast(.9) brightness(1.15);
+  opacity:.22;
+  pointer-events:none;
+}
+.card-map.full{ opacity:.28; position:absolute; }
+
+/* ---------- opening screen ---------- */
+[data-screen="opening"]{ display:flex; flex-direction:column; align-items:center; justify-content:center; }
+[data-screen="opening"] .map-bg{ opacity:.5; }
+
+.opening-body{
+  position:relative;
+  z-index:2;
+  text-align:center;
+  padding:0 30px;
+}
+.badge{
+  width:150px; height:150px;
+  margin:0 auto 18px;
+  border-radius:50%;
+  background:var(--paper);
+  border:2.5px solid var(--ink);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 10px 26px rgba(0,0,0,.18);
+}
+.badge img{ width:78px; }
+
+.wordmark{
+  font-family:var(--font-word);
+  font-weight:900;
+  font-size:23px;
+  letter-spacing:.01em;
+  color:var(--maroon);
+  margin-bottom:8px;
+}
+.tagline{
+  font-family:var(--font-head);
+  font-weight:600;
+  font-size:12.5px;
+  color:var(--tagline);
+}
+
+.tap-continue{
+  position:absolute;
+  bottom:34px; left:50%;
+  transform:translateX(-50%);
+  z-index:2;
+  background:rgba(23,24,26,.06);
+  border:none;
+  color:var(--ink);
+  font-family:var(--font-body);
+  font-weight:600;
+  font-size:13px;
+  padding:11px 22px;
+  border-radius:30px;
+  cursor:pointer;
+}
+.tap-continue:hover{ background:rgba(23,24,26,.12); }
+
+/* ---------- status bar ---------- */
+.status-bar{
+  position:relative;
+  z-index:3;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 22px 4px;
+  font-family:var(--font-body);
+  font-weight:600;
+  font-size:14px;
+  color:var(--ink);
+}
+.status-icons{ display:flex; align-items:center; gap:4px; }
+.status-icons svg{ fill:currentColor; display:block; }
+
+/* ---------- card ---------- */
+.card{
+  position:relative;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* ---------- forms (signup / login): moved to !access.css
+   Note: .btn-primary and .btn-text there are also used by the Location
+   screen below -- re-include !access.css there too. */
+
+/* ---------- location screen ---------- */
+.location-body{
+  position:relative;
+  z-index:2;
+  flex:1;
+  display:flex;
+  align-items:center;
+  gap:16px;
+  padding:0 26px;
+}
+.pin{ color:var(--ink); flex:none; }
+.pin svg{ width:44px; height:44px; }
+.location-text h1{
+  font-family:var(--font-head);
+  font-weight:700;
+  font-size:20px;
+  line-height:1.25;
+}
+.location-text h1 .dot{ color:var(--violet); }
+.location-text .sub{
+  color:var(--gray);
+  font-size:12.5px;
+  margin-top:6px;
+}
+
+.coords{
+  position:relative;
+  z-index:2;
+  text-align:center;
+  font-family:var(--font-body);
+  font-weight:600;
+  font-size:12.5px;
+  color:var(--red-dark);
+  margin:0 26px 6px;
+}
+
+.location-actions{
+  position:relative;
+  z-index:2;
+  padding:0 26px 30px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  align-items:center;
+}
+.location-actions .btn-primary{ width:100%; }
+
+/* ---------- home ---------- */
+/* ---------- home-card, home-top, eyebrow, bell button: moved to !home.css ---------- */
+
+.tab-panel{ display:none; flex:1; position:relative; overflow:hidden; }
+.tab-panel.is-active{ display:flex; flex-direction:column; }
+
+/* ---------- map-panel, help-copy, sos-btn, ring/pulse: moved to !home.css ---------- */
+
+.panel-inner{
+  position:relative;
+  z-index:2;
+  padding:18px 22px;
+}
+.panel-inner.floating{
+  margin-top:auto;
+  background:rgba(255,255,255,.94);
+  backdrop-filter:blur(6px);
+  border-top-left-radius:20px;
+  border-top-right-radius:20px;
+  box-shadow:0 -10px 30px rgba(0,0,0,.08);
+}
+.panel-inner h3{
+  font-family:var(--font-head);
+  font-weight:700;
+  font-size:14.5px;
+  margin-bottom:12px;
+}
+/* ---------- responder list / dot-status: moved to !maps.css (also used by Emergencies tab below) ---------- */
+
+/* ---------- guide list: moved to !guide.css ---------- */
+
+.profile-row{
+  display:flex;
+  justify-content:space-between;
+  padding:12px 0;
+  border-bottom:1px solid var(--line);
+  font-size:13.5px;
+}
+.profile-row span:first-child{ color:var(--gray); }
+.profile-row span:last-child{ font-weight:600; }
+.btn-logout{ width:100%; margin-top:22px; }
+
+/* ---------- bottom tab bar: moved to !home.css ---------- */
+
+/* ---------- REPORT EMERGENCY SCREEN: moved to !community-emergency.css ---------- */
+/* ---------- overlays: location sheet & success modal ---------- */
+.sheet-overlay, .modal-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: rgba(15, 15, 20, .45);
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet-overlay.is-open, .modal-overlay.is-open { display: flex; }
+.modal-overlay { align-items: center; padding: 0 26px; }
+
+.sheet {
+  width: 100%;
+  max-height: 90%;
+  background: #fff;
+  border-top-left-radius: 22px;
+  border-top-right-radius: 22px;
+  padding: 10px 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  box-shadow: 0 -14px 34px rgba(0, 0, 0, .18);
+}
+.sheet-handle {
+  width: 38px;
+  height: 4px;
+  border-radius: 3px;
+  background: #D8D6D2;
+  margin: 0 auto 2px;
+}
+.sheet-header { display: flex; align-items: center; gap: 10px; }
+.sheet-header .back-btn { background: none; border: none; font-size: 18px; cursor: pointer; color: var(--ink); padding: 0; }
+.sheet-header h3 {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 15px;
+  color: #111111;
+}
+
+.sheet-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #F4F3F1;
+  border-radius: 12px;
+  padding: 11px 14px;
+}
+.sheet-search svg { width: 15px; height: 15px; color: var(--gray); flex: none; }
+.sheet-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  width: 100%;
+  color: var(--ink);
+}
+
+.mini-map {
+  position: relative;
+  height: 128px;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, transparent 46%, #F4D35E 46%, #F4D35E 54%, transparent 54%),
+    linear-gradient(120deg, #DCEFE3, #E9ECEE 55%, #D9E7F5);
+}
+.mini-map-pin {
+  position: absolute;
+  top: 48%; left: 50%;
+  width: 14px; height: 14px;
+  background: var(--red);
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  transform: translate(-50%, -90%) rotate(-45deg);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+}
+.mini-map-you-here {
+  position: absolute;
+  top: 36%; left: 50%;
+  transform: translate(-50%, -100%);
+  background: #111;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.track-location-pill {
+  position: absolute;
+  bottom: 8px; right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 10px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 9.5px;
+  color: var(--red);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .15);
+  cursor: pointer;
+}
+.track-location-pill svg { width: 11px; height: 11px; }
+
+.mini-map-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: #333;
+  line-height: 1.4;
+}
+.mini-map-address img { width: 15px; height: 15px; margin-top: 1px; }
+
+.sheet-fields { display: flex; flex-direction: column; gap: 10px; }
+.sheet-fields input {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  color: var(--ink);
+}
+.sheet-fields input:focus,
+.sheet-fields input.is-focused { border-color: var(--red); }
+
+/* success modal */
+.success-modal {
+  position: relative;
+  width: 100%;
+  background: #fff;
+  border-radius: 20px;
+  padding: 30px 22px 22px;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .28);
+}
+.success-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  background: none;
+  border: none;
+  color: var(--gray);
+  font-size: 15px;
+  cursor: pointer;
+}
+.success-check { width: 56px; margin: 0 auto 16px; display: block; }
+.success-modal h3 {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 15.5px;
+  margin-bottom: 6px;
+  color: #111111;
+}
+.success-modal p {
+  font-size: 12px;
+  color: var(--gray);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.success-modal .btn-primary-red { width: 100%; margin-top: 0; }
+
+/* ---------- camera screen ---------- */
+[data-screen="camera"] { background: #0B0B0C; }
+.camera-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #0B0B0C;
+  color: #fff;
+}
+.camera-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 8px;
+}
+.camera-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+}
+.camera-topicons { display: flex; gap: 18px; }
+.camera-topicons svg { width: 17px; height: 17px; color: #fff; }
+
+.camera-preview { position: relative; flex: 1; overflow: hidden; background: #000; }
+.camera-feed { width: 100%; height: 100%; object-fit: cover; display: block; }
+.capture-flash {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 64px;
+  transform: translate(-50%, -50%) scale(.7);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.capture-flash.is-visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+.camera-modes {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 14px 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: rgba(255, 255, 255, .55);
+}
+.camera-modes .is-active { color: #fff; font-weight: 700; }
+
+.camera-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 34px 16px;
+}
+.camera-lock, .camera-flip {
+  background: rgba(255, 255, 255, .12);
+  border: none;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+}
+.camera-lock svg, .camera-flip svg { width: 16px; height: 16px; }
+.shutter-btn {
+  width: 62px; height: 62px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .35);
+}
+.shutter-btn:active { transform: scale(.94); }
+
+.camera-handle {
+  width: 38px; height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .35);
+  margin: 0 auto 10px;
+}
+
+/* ---------- notifications screen: moved to !home.css ---------- */
+
+/* ---------- profile screen ---------- */
+.profile-panel{ display:flex; flex-direction:column; height:100%; }
+.profile-title{
+  font-family:var(--font-head);
+  font-weight:700;
+  font-size:19px;
+  margin-bottom:10px;
+}
+.profile-row.is-hidden{ display:none; }
+
+.btn-outline-red{
+  background:#fff;
+  color:var(--red);
+  border:1.5px solid var(--red);
+  font-family:var(--font-head);
+  font-weight:700;
+  font-size:14px;
+  border-radius:30px;
+  padding:14px;
+  cursor:pointer;
+  transition:background .15s;
+}
+.btn-outline-red:hover{ background:rgba(229,52,46,.06); }
+.btn-outline-red.btn-logout{ width:100%; margin-top:26px; }
+
+.btn-outline{
+  flex:1;
+  background:#fff;
+  color:var(--gray);
+  border:1.5px solid var(--line);
+  font-family:var(--font-head);
+  font-weight:700;
+  font-size:14px;
+  border-radius:30px;
+  padding:13px;
+  cursor:pointer;
+  transition:background .15s;
+}
+.btn-outline:hover{ background:#F6F6F5; }
+
+/* ---------- shared menu list (Profile / Settings rows) ---------- */
+.menu-list{
+  display:flex;
+  flex-direction:column;
+}
+.menu-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+  background:none;
+  border:none;
+  border-bottom:1px solid var(--line);
+  padding:15px 2px;
+  font-family:var(--font-body);
+  font-size:13.5px;
+  font-weight:500;
+  color:var(--ink);
+  text-align:left;
+  cursor:pointer;
+}
+.menu-row:last-child{ border-bottom:none; }
+.menu-row:hover{ background:rgba(23,24,26,.02); }
+.menu-row .chev{ width:15px; height:15px; color:var(--gray); flex:none; }
+.menu-row .menu-value{ color:var(--gray); font-size:12.5px; }
+
+/* ---------- settings-style screens (Account Details / Setup SOS / Settings): moved to !sos.css ----------
+   Shared by Account Details, Setup SOS, and the Settings screen (still below).
+   Re-include !sos.css wherever those screens render. */
+/* ---------- responsive & access ---------- */
+@media (max-width:400px){
+  body{ padding:0; background:var(--paper); }
+  .phone{ width:100vw; height:100vh; border-radius:0; box-shadow:none; }
+  .dev-tag{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .ring{ animation:none; opacity:0; }
+}
+
+a:focus-visible, button:focus-visible, input:focus-visible{
+  outline:2px solid var(--violet);
+  outline-offset:2px;
+}
+
+/* FUCK
+*/
+

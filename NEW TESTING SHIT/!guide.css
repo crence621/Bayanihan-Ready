@@ -1,0 +1,3 @@
+.guide-list{ list-style:none; display:flex; flex-direction:column; gap:14px; }
+.guide-list li{ font-size:13px; line-height:1.55; color:var(--ink); }
+.guide-list li b{ color:var(--red-dark); }

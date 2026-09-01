@@ -1,0 +1,62 @@
+<!--
+  !account.html
+  Account Details screen, cut from index.html.
+  Originally <section data-screen="account-details">.
+  Styles: reuses the settings-* rules -- see !sos.css, since no CSS in
+  style.css was specific to Account Details alone. Include !sos.css here too.
+  Depends on: !style.css, !api.js, !app.js
+-->
+
+
+  <!-- SCREEN 9 — ACCOUNT DETAILS -->
+  <section class="screen" data-screen="account-details">
+    <div class="dev-tag">Account Details</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Account Details</h2>
+      </div>
+
+      <div class="settings-body">
+        <form id="account-form" novalidate>
+          <label class="settings-field">
+            <span>Name</span>
+            <span class="settings-input-wrap">
+              <input type="text" id="account-name" value="Juan Gonzales" autocomplete="name">
+            </span>
+          </label>
+
+          <label class="settings-field">
+            <span>Email</span>
+            <span class="settings-input-wrap">
+              <input type="email" id="account-email" value="juangonzales@gmail.com" autocomplete="email">
+              <button type="button" class="settings-verify" id="account-verify-email">Verify</button>
+            </span>
+          </label>
+
+          <label class="settings-field">
+            <span>Mobile Number</span>
+            <span class="settings-input-wrap">
+              <input type="tel" id="account-mobile" value="+63 985 478 9077" autocomplete="tel">
+              <span class="settings-check" aria-label="Verified">✓</span>
+            </span>
+          </label>
+        </form>
+      </div>
+
+      <div class="settings-actions">
+        <button type="button" class="btn-outline" data-goto="home">Cancel</button>
+        <button type="button" class="btn-primary-red" id="account-save-btn">Save</button>
+      </div>
+    </div>
+  </section>

@@ -1,0 +1,186 @@
+/* ---------- settings-style screens (Account Details / Setup SOS / Settings) ---------- */
+.settings-body{
+  position:relative;
+  z-index:2;
+  flex:1;
+  padding:18px 20px 10px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  background:#F8F8F8;
+  overflow-y:auto;
+}
+.settings-body form{ display:flex; flex-direction:column; gap:18px; }
+
+.settings-actions{
+  position:relative;
+  z-index:2;
+  display:flex;
+  gap:12px;
+  padding:14px 20px 26px;
+  background:#F8F8F8;
+}
+.settings-actions .btn-primary-red{ flex:1; margin-top:0; }
+
+.settings-field{ display:flex; flex-direction:column; gap:7px; }
+.settings-field > span:first-child{
+  font-size:12px;
+  font-weight:600;
+  color:var(--ink);
+}
+.settings-input-wrap{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:#fff;
+  border-radius:12px;
+  padding:2px 16px;
+  box-shadow:0 2px 8px rgba(20,20,30,.05);
+}
+.settings-input-wrap input{
+  flex:1;
+  min-width:0;
+  border:none;
+  outline:none;
+  background:transparent;
+  font-family:var(--font-body);
+  font-size:13.5px;
+  padding:14px 0;
+  color:var(--ink);
+}
+.settings-verify{
+  flex:none;
+  background:none;
+  border:none;
+  color:var(--red);
+  font-family:var(--font-body);
+  font-weight:700;
+  font-size:12px;
+  cursor:pointer;
+}
+.settings-check{
+  flex:none;
+  width:20px; height:20px;
+  border-radius:50%;
+  background:var(--red);
+  color:#fff;
+  font-size:11px;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* toggle switch */
+.switch{
+  position:relative;
+  display:inline-block;
+  width:40px; height:24px;
+  flex:none;
+}
+.switch input{
+  position:absolute;
+  opacity:0;
+  width:1px; height:1px;
+}
+.switch-slider{
+  position:absolute;
+  inset:0;
+  background:#D9D8D5;
+  border-radius:14px;
+  cursor:pointer;
+  transition:background .2s ease;
+}
+.switch-slider::before{
+  content:'';
+  position:absolute;
+  left:3px; top:3px;
+  width:18px; height:18px;
+  background:#fff;
+  border-radius:50%;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+  transition:transform .2s ease;
+}
+.switch input:checked + .switch-slider{ background:var(--red); }
+.switch input:checked + .switch-slider::before{ transform:translateX(16px); }
+.switch input:focus-visible + .switch-slider{ outline:2px solid var(--violet); outline-offset:2px; }
+
+.toggle-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:13px;
+  font-weight:500;
+  color:var(--ink);
+  padding:2px;
+}
+
+/* range slider (Setup SOS radius) */
+.range-block{ padding-top:4px; }
+.range-track-wrap{ position:relative; padding-top:24px; }
+.range-bubble{
+  position:absolute;
+  top:0;
+  left:30%;
+  transform:translateX(-50%);
+  background:var(--red);
+  color:#fff;
+  font-family:var(--font-body);
+  font-weight:700;
+  font-size:10.5px;
+  padding:3px 8px;
+  border-radius:6px;
+  white-space:nowrap;
+  pointer-events:none;
+}
+.range-bubble::after{
+  content:'';
+  position:absolute;
+  left:50%; bottom:-4px;
+  transform:translateX(-50%);
+  border:4px solid transparent;
+  border-top-color:var(--red);
+}
+.range-input{
+  -webkit-appearance:none;
+  appearance:none;
+  width:100%;
+  height:4px;
+  border-radius:2px;
+  outline:none;
+  cursor:pointer;
+  background:linear-gradient(to right, var(--red) 0 30%, var(--line) 30% 100%);
+}
+.range-input::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:16px; height:16px;
+  border-radius:50%;
+  background:var(--red);
+  border:2px solid #fff;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+  cursor:pointer;
+  margin-top:-6px;
+}
+.range-input::-moz-range-track{ height:4px; border-radius:2px; background:transparent; }
+.range-input::-moz-range-thumb{
+  width:16px; height:16px;
+  border-radius:50%;
+  background:var(--red);
+  border:2px solid #fff;
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+  cursor:pointer;
+}
+.range-labels{
+  display:flex;
+  justify-content:space-between;
+  font-size:11px;
+  color:var(--gray);
+  margin-top:6px;
+}
+
+/* mini-map real image layer (Setup SOS + Select Location sheet) */
+.mini-map-img{
+  position:absolute;
+  inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+}
+
