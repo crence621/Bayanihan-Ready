@@ -782,3 +782,39 @@
   }, 3500);
 })();
 
+// ==========================================
+// GUIDEBOOK TAB ROUTING FUNCTIONS
+// ==========================================
+
+function openGuide(disasterType) {
+  const mainList = document.getElementById('guidebook-list-view');
+  if (mainList) {
+    mainList.classList.add('hidden');
+  }
+
+  document.querySelectorAll('.guidebook-detail-view').forEach(view => {
+    view.classList.add('hidden');
+  });
+
+  const targetView = document.getElementById(`guidebook-${disasterType}`);
+  if (targetView) {
+    targetView.classList.remove('hidden');
+    
+    // Scroll container to top
+    const homeCard = document.querySelector('.home-card');
+    if (homeCard) {
+      homeCard.scrollTop = 0;
+    }
+  }
+}
+
+function showGuideList() {
+  document.querySelectorAll('.guidebook-detail-view').forEach(view => {
+    view.classList.add('hidden');
+  });
+
+  const mainList = document.getElementById('guidebook-list-view');
+  if (mainList) {
+    mainList.classList.remove('hidden');
+  }
+}
