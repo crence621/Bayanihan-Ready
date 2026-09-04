@@ -6,7 +6,7 @@
 <title>Bayanihan Ready</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="!css/style.css">
 </head>
 <body>
 
@@ -15,11 +15,11 @@
   <!-- SCREEN 1 — OPENING -->
   <section class="screen is-active" data-screen="opening">
     <div class="dev-tag">Opening <span>1</span></div>
-    <img class="map-bg" src="%assets/manila-map.jpg" alt="" aria-hidden="true">
+    <img class="map-bg" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
     <div class="opening-body">
       <div class="badge">
-        <img src="%assets/first-aid.png" alt="Bayanihan Ready logo">
+        <img src="!assets/!images/first-aid.png" alt="Bayanihan Ready logo">
       </div>
       <h1 class="wordmark">Bayanihan Ready</h1>
       <p class="tagline">Community first. Always ready.</p>
@@ -42,7 +42,7 @@
         </span>
       </div>
 
-      <img class="card-map" src="%assets/manila-map.jpg" alt="" aria-hidden="true">
+      <img class="card-map" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
       <form class="auth-form" id="signup-form" novalidate>
         <h1>Let's sign you up<span class="dot">.</span></h1>
@@ -75,7 +75,9 @@
 
         <button type="submit" class="btn-primary">Sign up</button>
 
-        <p class="switch">Already a member? <a href="#" data-goto="login">Log in</a></p>
+        <p class="switch" style="white-space: nowrap; width: 100%; text-align: center; align-self: center;"> Already a member? 
+            <a href="#" data-goto="login">Log in</a>
+        </p>
       </form>
     </div>
   </section>
@@ -94,7 +96,7 @@
         </span>
       </div>
 
-      <img class="card-map" src="%assets/manila-map.jpg" alt="" aria-hidden="true">
+      <img class="card-map" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
       <form class="auth-form" id="login-form" novalidate>
         <h1>Let's sign you in<span class="dot">.</span></h1>
@@ -104,7 +106,7 @@
           <span>Email</span>
           <span class="input-wrap">
             <svg class="input-icon" viewBox="0 0 20 16" fill="none"><path d="M2 2h16v12H2z" stroke="currentColor" stroke-width="1.4"/><path d="m2 3 8 6 8-6" stroke="currentColor" stroke-width="1.4"/></svg>
-            <input type="email" name="email" placeholder="Your email" autocomplete="email" required>
+            <input type="email" name="email" placeholder="Your email" autocomplete="email" required style = "padding-left: 38px;">
           </span>
         </label>
 
@@ -122,7 +124,9 @@
 
         <button type="submit" class="btn-primary">Login</button>
 
-        <p class="switch">Are you new here? <a href="#" data-goto="signup">Sign up</a></p>
+        <p class="switch" style="width: 100%; white-space: nowrap; text-align: center; align-self: center;">
+            Are you new here? <a href="#" data-goto="signup">Sign up</a>
+        </p>
 
         <div class="divider"><span>or</span></div>
 
@@ -152,7 +156,7 @@
         </span>
       </div>
 
-      <img class="card-map" src="%assets/manila-map.jpg" alt="" aria-hidden="true">
+      <img class="card-map" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
 
       <div class="location-body">
         <div class="pin">
@@ -202,7 +206,7 @@
       <!-- HOME TAB -->
       <div class="tab-panel is-active" data-tab="home">
         <div class="map-panel">
-          <img class="card-map full" src="%assets/manila-map.jpg" alt="" aria-hidden="true">
+          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
           <p class="help-copy">Help is just a click away!<br>Click <b>SOS button</b> to call the help.</p>
           <p class="coords" id="home-coords" hidden></p>
 
@@ -216,18 +220,26 @@
 
       <!-- EMERGENCIES TAB -->
       <div class="tab-panel" data-tab="emergencies">
-        <div class="panel-inner">
-          <h3>Your Reports</h3>
-          <ul class="responder-list" id="incident-list">
-            <li class="empty">No reports yet. Reports you send from the SOS button will show up here.</li>
-          </ul>
+        <div class="emergencies-panel">
+          <div class="segment-toggle" id="emergency-segment">
+            <button type="button" class="segment-btn is-active" data-segment="mine">Reported by You</button>
+            <button type="button" class="segment-btn" data-segment="others">Reported by Others</button>
+          </div>
+
+          <div class="emergency-feed" id="emergency-feed"><!-- rendered by app.js --></div>
+
+          <button class="fab" id="btn-new-report" type="button" data-goto="report-emergency" aria-label="Report an emergency">
+            <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v14M3 10h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </button>
+
+          <button class="btn-community-mode" id="btn-community-mode" type="button">Community Mode</button>
         </div>
       </div>
 
       <!-- MAPS TAB -->
       <div class="tab-panel" data-tab="maps">
         <div class="map-panel">
-          <img class="card-map full" src="%assets/manila-map.jpg" alt="" aria-hidden="true">
+          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
           <div class="panel-inner floating">
             <h3>Nearby Responders</h3>
             <ul class="responder-list" id="responder-list"></ul>
@@ -235,26 +247,360 @@
         </div>
       </div>
 
-      <!-- GUIDE TAB -->
+      <!-- GUIDE TAB PANEL -->
       <div class="tab-panel" data-tab="guide">
-        <div class="panel-inner">
-          <h3>First Aid Guide</h3>
-          <ul class="guide-list">
-            <li><b>Bleeding</b> — apply firm, direct pressure with a clean cloth and elevate the wound.</li>
-            <li><b>Burns</b> — cool under running water for 10–20 minutes; don't apply ice.</li>
-            <li><b>Choking</b> — 5 back blows, then 5 abdominal thrusts, repeat.</li>
-            <li><b>Fainting</b> — lay the person flat, raise their legs, loosen tight clothing.</li>
-          </ul>
-        </div>
-      </div>
+        <div id="guidebook-list-view">
+          <h2 class="guide-title">Emergency Guidebook</h2>
 
+          <div class="guidebook-list-card" onclick="openGuide('thunderstorm')">
+            <div class="disaster-icon-box bg-red">
+              <img src="!assets/!buttons/Thunderstorm.png" alt="Thunderstorm">
+            </div>
+            <div class="card-info">
+              <h3>Thunderstorm</h3>
+              <p>Stay Indoors at all times</p>
+            </div>
+          </div>
+
+          <div class="guidebook-list-card" onclick="openGuide('flood')">
+            <div class="disaster-icon-box bg-red">
+              <img src="!assets/!buttons/Flood.png" alt="Flood">
+            </div>
+            <div class="card-info">
+              <h3>Flood</h3>
+              <p>Move to higher ground</p>
+            </div>
+          </div>
+
+          <div class="guidebook-list-card" onclick="openGuide('typhoon')">
+            <div class="disaster-icon-box bg-red">
+              <img src="!assets/!buttons/Typhoon.png" alt="Typhoon">
+            </div>
+            <div class="card-info">
+              <h3>Typhoon</h3>
+              <p>Stay Indoors at all times</p>
+            </div>
+          </div>
+
+          <div class="guidebook-list-card" onclick="openGuide('offline-map')">
+            <div class="disaster-icon-box bg-red">
+              <img src="!assets/!buttons/OfflineMap.png" alt="Offline Map">
+            </div>
+            <div class="card-info">
+              <h3>Offline Map</h3>
+              <p>Safe Zone and Resources</p>
+            </div>
+          </div>
+
+          <div class="guidebook-list-card" onclick="openGuide('earthquake')">
+            <div class="disaster-icon-box bg-red">
+              <img src="!assets/!buttons/Earthquake.png" alt="Earthquake">
+            </div>
+            <div class="card-info">
+              <h3>Earthquake</h3>
+              <p>Drop, Cover, and Hold on</p>
+            </div>
+          </div>
+
+          <div class="guidebook-list-card" onclick="openGuide('first-aid')">
+            <div class="disaster-icon-box bg-red">
+              <img src="!assets/!buttons/FirstAidButton.png" alt="First Aid">
+            </div>
+            <div class="card-info">
+              <h3>First Aid</h3>
+              <p>Help Hurt People Immediately</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- DISASTER DETAIL VIEWS -->
+
+        <!-- THUNDERSTORM DETAIL -->
+        <div id="guidebook-thunderstorm" class="guidebook-detail-view hidden">
+          <div class="guide-header">
+            <h2 class="guide-title">Emergency Guidebook</h2>
+            <button class="back-btn" onclick="showGuideList()" aria-label="Back">
+              <img src="!assets/!buttons/BackButton.png" alt="Back">
+            </button>
+          </div>
+
+          <div class="disaster-hero-card">
+            <div class="disaster-icon-box bg-red hero-icon">
+              <img src="!assets/!buttons/Thunderstorm.png" alt="Thunderstorm Icon">
+            </div>
+            <h1 class="disaster-hero-title">Thunderstorm</h1>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>Before Thunderstorm</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Check PAGASA advisories for local thunderstorm warnings.</li>
+              <li>Stock food, clean water, medicines, and flashlights.</li>
+              <li>Prepare an emergency kit and important documents.</li>
+              <li>Stay updated with weather alerts and evacuation notices.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>During Thunderstorm</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Stay indoors and away from windows.</li>
+              <li>Unplug electronics to protect from sudden lightning power surges.</li>
+              <li>Avoid plumbing and running waters to avoid potential electrical charges.</li>
+              <li>Move to evacuation centers if instructed by authorities.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>After Thunderstorm</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Stay inside for at least 30 minutes after the thunderstorm.</li>
+              <li>Avoid fallen and exposed cables and report broken utility lines.</li>
+              <li>Inspect your home for any damages.</li>
+              <li>Check appliances and electronics before using them again.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- FLOOD DETAIL -->
+        <div id="guidebook-flood" class="guidebook-detail-view hidden">
+          <div class="guide-header">
+            <h2 class="guide-title">Emergency Guidebook</h2>
+            <button class="back-btn" onclick="showGuideList()" aria-label="Back">
+              <img src="!assets/!buttons/BackButton.png" alt="Back">
+            </button>
+          </div>
+
+          <div class="disaster-hero-card">
+            <div class="disaster-icon-box bg-red hero-icon">
+              <img src="!assets/!buttons/Flood.png" alt="Flood Icon">
+            </div>
+            <h1 class="disaster-hero-title">Flood</h1>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>Before Flood</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Move valuables and important documents to higher places.</li>
+              <li>Prepare emergency kit (food, water, flashlight, first aid).</li>
+              <li>Stay updated with weather alerts and warnings.</li>
+              <li>Park your car on higher ground to avoid water damage.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>During Flood</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Go to higher ground immediately.</li>
+              <li>Avoid walking or driving through floodwaters.</li>
+              <li>If trapped in a car, abandon it if water rises and it's safe to exit.</li>
+              <li>Keep communication devices charged and listen to official instructions.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>After Flood</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Return home only when authorities say it's safe.</li>
+              <li>Do not start a flooded car until it's checked for damage.</li>
+              <li>Watch out for damaged roads, power lines, and contaminated water.</li>
+              <li>Help neighbors if possible and report hazards.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- TYPHOON DETAIL -->
+        <div id="guidebook-typhoon" class="guidebook-detail-view hidden">
+          <div class="guide-header">
+            <h2 class="guide-title">Emergency Guidebook</h2>
+            <button class="back-btn" onclick="showGuideList()" aria-label="Back">
+              <img src="!assets/!buttons/BackButton.png" alt="Back">
+            </button>
+          </div>
+
+          <div class="disaster-hero-card">
+            <div class="disaster-icon-box bg-red hero-icon">
+              <img src="!assets/!buttons/Typhoon.png" alt="Typhoon Icon">
+            </div>
+            <h1 class="disaster-hero-title">Typhoon</h1>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>Before Typhoon</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Secure your home (windows, doors, roof).</li>
+              <li>Stock food, clean water, medicines, and flashlights.</li>
+              <li>Prepare an emergency kit and important documents.</li>
+              <li>Stay updated with weather alerts and evacuation notices.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>During Typhoon</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Stay indoors and away from windows.</li>
+              <li>Avoid floodwaters and keep safe from flying debris.</li>
+              <li>Keep communication devices charged and listen to official advisories.</li>
+              <li>Move to evacuation centers if instructed by authorities.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>After Typhoon</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Check for hazards like downed power lines or damaged structures.</li>
+              <li>Assist neighbors if safe and report damages.</li>
+              <li>Follow local recovery instructions and wait for clearance before returning home.</li>
+              <li>Clean and disinfect water sources to avoid contamination.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- OFFLINE MAP DETAIL VIEW -->
+        <div id="guidebook-offline-map" class="guidebook-detail-view map-view-container hidden">
+          
+          <!-- FLOATING HEADER OVERLAY -->
+          <div class="map-overlay-header">
+            <h2 class="guide-title">Emergency Guidebook</h2>
+            <button class="back-btn-circle" onclick="showGuideList()" aria-label="Back">
+              <img src="!assets/!buttons/BackButton.png" alt="Back">
+            </button>
+          </div>
+
+          <!-- OFFLINE MAP DISPLAY AREA -->
+          <div class="offline-map-wrapper">
+            <!-- Map Image fallback or Leaflet / Mapbox Canvas Container -->
+            <img src="!assets/!images/balangiga-offline-map.png" alt="Balangiga Offline Map" class="map-image-content">
+          </div>
+
+        </div>
+
+        <!-- EARTHQUAKE DETAIL -->
+        <div id="guidebook-earthquake" class="guidebook-detail-view hidden">
+          <div class="guide-header">
+            <h2 class="guide-title">Emergency Guidebook</h2>
+            <button class="back-btn" onclick="showGuideList()" aria-label="Back">
+              <img src="!assets/!buttons/BackButton.png" alt="Back">
+            </button>
+          </div>
+
+          <div class="disaster-hero-card">
+            <div class="disaster-icon-box bg-red hero-icon">
+              <img src="!assets/!buttons/Earthquake.png" alt="Earthquake Icon">
+            </div>
+            <h1 class="disaster-hero-title">Earthquake</h1>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>Before Earthquake</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Secure heavy furniture, appliances, and overhead fixtures to walls.</li>
+              <li>Prepare an emergency supply kit with essential medications and water.</li>
+              <li>Identify safe spots in each room (under sturdy tables, internal walls).</li>
+              <li>Plan and practice family earthquake response and evacuation routes.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>During Earthquake</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Drop, Cover, and Hold On under a sturdy table or desk.</li>
+              <li>Stay away from glass, windows, outside doors, and exterior walls.</li>
+              <li>If outdoors, move to an open area away from buildings, trees, and power lines.</li>
+              <li>If in a moving vehicle, pull over safely and stay inside until shaking stops.</li>
+            </ol>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>After Earthquake</h3>
+            </div>
+            <ol class="guide-step-list">
+              <li>Be prepared for aftershocks and evacuate safely if structure is damaged.</li>
+              <li>Check yourself and others for injuries; apply first aid if trained.</li>
+              <li>Inspect gas, water, and electrical lines for damage or leaks.</li>
+              <li>Listen to local emergency broadcasts for public safety instructions.</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- FIRST AID DETAIL VIEW -->
+        <div id="guidebook-first-aid" class="guidebook-detail-view hidden">
+          <div class="guide-header">
+            <h2 class="guide-title">Emergency Guidebook</h2>
+            <button type="button" class="back-btn" onclick="showGuideList()" aria-label="Back">
+              <img src="!assets/!buttons/BackButton.png" alt="Back">
+            </button>
+          </div>
+
+          <div class="disaster-hero-card">
+            <div class="disaster-icon-box bg-red hero-icon">
+              <img src="!assets/!buttons/FirstAidButton.png" alt="First Aid Icon">
+            </div>
+            <h1 class="disaster-hero-title">First Aid</h1>
+          </div>
+
+          <div class="guide-section">
+            <div class="section-title-row">
+              <h3>First Aid Guide</h3>
+            </div>
+            <ul class="first-aid-list">
+              <li><strong class="text-red">Bleeding</strong> — apply firm, direct pressure with a clean cloth and elevate the wound.</li>
+              <li><strong class="text-red">Burns</strong> — cool under running water for 10–20 minutes; don't apply ice.</li>
+              <li><strong class="text-red">Choking</strong> — 5 back blows, then 5 abdominal thrusts, repeat.</li>
+              <li><strong class="text-red">Fainting</strong> — lay the person flat, raise their legs, loosen tight clothing.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
       <!-- PROFILE TAB -->
       <div class="tab-panel" data-tab="profile">
-        <div class="panel-inner">
-          <h3>Profile</h3>
-          <p class="profile-row"><span>Name</span><span id="profile-name">Juan Gonzales</span></p>
-          <p class="profile-row"><span>Email</span><span id="profile-email">—</span></p>
-          <button class="btn-primary btn-logout" id="logout-btn">Log out</button>
+        <div class="panel-inner profile-panel">
+          <h3 class="profile-title">Profile</h3>
+
+          <nav class="menu-list">
+            <button class="menu-row" type="button" data-goto="account-details">
+              <span>Account Details</span>
+              <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="menu-row" type="button" data-goto="setup-sos">
+              <span>Setup SOS</span>
+              <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="menu-row" type="button" data-goto="settings">
+              <span>Settings</span>
+              <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="menu-row" type="button" data-goto="settings">
+              <span>Settings / About</span>
+              <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </nav>
+
+          <button class="btn-outline-red btn-logout" id="logout-btn" type="button">Logout</button>
         </div>
       </div>
 
@@ -281,6 +627,8 @@
         </button>
       </nav>
     </div>
+
+
   </section>
 
   <!-- SCREEN 6 — REPORT EMERGENCY -->
@@ -307,35 +655,35 @@
         <p class="section-title">Select Emergency type</p>
         <div class="type-grid">
           <button class="type-card is-selected" type="button" data-type="Flood">
-            <span class="type-icon-wrapper"><img src="%assets/Flood.png" alt="Flood"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Flood.png" alt="Flood"></span>
             <span>Flood</span>
           </button>
           <button class="type-card" type="button" data-type="Fire">
-            <span class="type-icon-wrapper"><img src="%assets/Fire.png" alt="Fire"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Fire.png" alt="Fire"></span>
             <span>Fire</span>
           </button>
           <button class="type-card" type="button" data-type="Medical">
-            <span class="type-icon-wrapper"><img src="%assets/Medical.png" alt="Medical"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Medical.png" alt="Medical"></span>
             <span>Medical</span>
           </button>
           <button class="type-card" type="button" data-type="Accident">
-            <span class="type-icon-wrapper"><img src="%assets/Accident.png" alt="Accident"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Accident.png" alt="Accident"></span>
             <span>Accident</span>
           </button>
           <button class="type-card" type="button" data-type="Quake">
-            <span class="type-icon-wrapper"><img src="%assets/Quake.png" alt="Quake"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Quake.png" alt="Quake"></span>
             <span>Quake</span>
           </button>
           <button class="type-card" type="button" data-type="Robbery">
-            <span class="type-icon-wrapper"><img src="%assets/Robbery.png" alt="Robbery"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Robbery.png" alt="Robbery"></span>
             <span>Robbery</span>
           </button>
           <button class="type-card" type="button" data-type="Assault">
-            <span class="type-icon-wrapper"><img src="%assets/Assault.png" alt="Assault"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Assault.png" alt="Assault"></span>
             <span>Assault</span>
           </button>
           <button class="type-card" type="button" data-type="Other">
-            <span class="type-icon-wrapper"><img src="%assets/Other.png" alt="Other"></span>
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Other.png" alt="Other"></span>
             <span>Other</span>
           </button>
         </div>
@@ -344,7 +692,7 @@
         <p class="section-title">Location</p>
         <div class="location-card-box">
           <div class="loc-text">
-            <img src="%assets/Pin.png" class="loc-icon-img" alt="Location Pin">
+            <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
             <span id="report-loc-text">6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
           </div>
           <button class="change-link" type="button" id="btn-change-location">Change</button>
@@ -354,15 +702,15 @@
         <p class="section-title">Attach proof</p>
         <div class="proof-grid">
           <button class="proof-btn" id="btn-proof-photo" type="button">
-            <img src="%assets/Camera.png" alt="Camera">
+            <img src="!assets/!buttons/Camera.png" alt="Camera">
             <span>Click<br>Pictures</span>
           </button>
           <button class="proof-btn" id="btn-proof-video" type="button">
-            <img src="%assets/Vid.png" alt="Video">
+            <img src="!assets/!buttons/Vid.png" alt="Video">
             <span>Video<br>Recording</span>
           </button>
           <button class="proof-btn" id="btn-proof-audio" type="button">
-            <img src="%assets/Mic.png" alt="Voice">
+            <img src="!assets/!buttons/Mic.png" alt="Voice">
             <span>Voice<br>Recording</span>
           </button>
         </div>
@@ -376,14 +724,475 @@
 
         <button type="button" class="btn-primary-red" id="btn-submit-report">Submit Report</button>
       </div>
+
+      <!-- SUCCESS MODAL -->
+      <div class="modal-overlay" id="success-overlay">
+        <div class="success-modal">
+          <button class="success-close" id="success-close" aria-label="Close">✕</button>
+          <img class="success-check" src="!assets/!images/Group_94.png" alt="">
+          <h3>Help is on the way.</h3>
+          <p>Read the tips to avoid any further risks.</p>
+          <button type="button" class="btn-primary-red" id="read-instructions-btn">Read Instructions</button>
+        </div>
+      </div>
     </div>
   </section>
 
+  <!-- SCREEN 7 — CAMERA -->
+  <section class="screen" data-screen="camera">
+    <div class="dev-tag">Camera</div>
+    <div class="camera-view">
+      <div class="camera-topbar">
+        <button class="camera-close" id="camera-close" aria-label="Close camera">✕</button>
+        <div class="camera-topicons">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.3"/><path d="M10 1.6v2M10 16.4v2M1.6 10h2M16.4 10h2M4 4l1.4 1.4M14.6 14.6 16 16M16 4l-1.4 1.4M5.4 14.6 4 16" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none"><path d="M10 2 3 12h5l-1 6 8-10h-5l1-6Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.3"/><path d="M10 6v4l3 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <svg viewBox="0 0 20 20" fill="none"><path d="M4 4a8 8 0 1 1-1.6 6.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M2 2v4.4h4.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
 
-  
+      <div class="camera-preview">
+        <img class="camera-feed" src="!assets/!images/image_20.png" alt="Camera preview">
+        <img class="capture-flash" id="capture-flash" src="!assets/!images/Frame_3502.png" alt="">
+      </div>
+
+      <div class="camera-modes">
+        <span>Studio</span>
+        <span>Portrait</span>
+        <span class="is-active">Photo</span>
+        <span>Video</span>
+        <span>AI Cam</span>
+      </div>
+
+      <div class="camera-controls">
+        <button class="camera-lock" type="button" aria-label="Lock exposure">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M5 7V4.6a3 3 0 0 1 6 0V7" stroke="currentColor" stroke-width="1.3"/></svg>
+        </button>
+        <button class="shutter-btn" id="shutter-btn" type="button" aria-label="Take photo"></button>
+        <button class="camera-flip" type="button" aria-label="Flip camera">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M2 5a6 6 0 0 1 10-2.2M2 2v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a6 6 0 0 1-10 2.2M14 14v-3h-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="camera-handle"></div>
+    </div>
+  </section>
+
+  <!-- SCREEN 8 — NOTIFICATIONS -->
+  <section class="screen" data-screen="notifications">
+    <div class="dev-tag">Notifications</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Notifications</h2>
+      </div>
+
+      <div class="notif-body" id="notif-list"></div>
+    </div>
+  </section>
+
+  <!-- SCREEN 9 — ACCOUNT DETAILS -->
+  <section class="screen" data-screen="account-details">
+    <div class="dev-tag">Account Details</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Account Details</h2>
+      </div>
+
+      <div class="settings-body">
+        <form id="account-form" novalidate>
+          <label class="settings-field">
+            <span>Name</span>
+            <span class="settings-input-wrap">
+              <input type="text" id="account-name" value="Juan Gonzales" autocomplete="name">
+            </span>
+          </label>
+
+          <label class="settings-field">
+            <span>Email</span>
+            <span class="settings-input-wrap">
+              <input type="email" id="account-email" value="juangonzales@gmail.com" autocomplete="email">
+              <button type="button" class="settings-verify" id="account-verify-email">Verify</button>
+            </span>
+          </label>
+
+          <label class="settings-field">
+            <span>Mobile Number</span>
+            <span class="settings-input-wrap">
+              <input type="tel" id="account-mobile" value="+63 985 478 9077" autocomplete="tel">
+              <span class="settings-check" aria-label="Verified">✓</span>
+            </span>
+          </label>
+        </form>
+      </div>
+
+      <div class="settings-actions">
+        <button type="button" class="btn-outline" data-goto="home">Cancel</button>
+        <button type="button" class="btn-primary-red" id="account-save-btn">Save</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 10 — SETUP SOS -->
+  <section class="screen" data-screen="setup-sos">
+    <div class="dev-tag">Setup SOS</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Setup SOS</h2>
+      </div>
+
+      <div class="settings-body">
+        <div class="range-block">
+          <div class="range-track-wrap">
+            <div class="range-bubble" id="sos-range-bubble">30 km</div>
+            <input type="range" class="range-input" id="sos-range" min="0" max="100" value="30">
+          </div>
+          <div class="range-labels"><span>0 km</span><span>100 km</span></div>
+        </div>
+
+        <div class="location-card-box">
+          <div class="loc-text">
+            <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
+            <span id="sos-loc-text">6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+          </div>
+          <button class="change-link" type="button" id="btn-sos-change-location">Change</button>
+        </div>
+
+        <div class="mini-map">
+          <img class="mini-map-img" src="!assets/!images/samar-map.png" alt="Map of Balangiga, Eastern Samar">
+          <span class="mini-map-you-here">You are here</span>
+          <button class="track-location-pill" type="button" id="sos-track-location-btn">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
+            Track my location
+          </button>
+        </div>
+
+        <div class="toggle-row">
+          <span>Send Current Location</span>
+          <label class="switch">
+            <input type="checkbox" id="sos-send-location" checked>
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <p class="section-title">Select Contact</p>
+        <div class="location-card-box">
+          <div class="loc-text"><span id="sos-contact-name">Mark Zimmermann</span></div>
+          <button class="change-link" type="button" id="btn-sos-change-contact">Change</button>
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <button type="button" class="btn-outline" data-goto="home">Cancel</button>
+        <button type="button" class="btn-primary-red" id="sos-save-btn">Save</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 11 — SETTINGS -->
+  <section class="screen" data-screen="settings">
+    <div class="dev-tag">Settings</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="home" aria-label="Back">←</button>
+        <h2>Settings</h2>
+      </div>
+
+      <div class="settings-body">
+        <nav class="menu-list">
+          <div class="menu-row">
+            <span>Turn On Notifications</span>
+            <label class="switch">
+              <input type="checkbox" id="settings-notifications" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <button class="menu-row" type="button" data-settings-alert="Language">
+            <span>Language</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="menu-row" type="button" data-settings-alert="Accessibility">
+            <span>Accessibility</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="menu-row" type="button" data-settings-alert="Help &amp; FAQs">
+            <span>Help &amp; FAQs</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="menu-row" type="button" data-settings-alert="Send Feedback/Bug Report">
+            <span>Send Feedback/Bug Report</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="menu-row">
+            <span>App Version</span>
+            <span class="menu-value">1.0.0</span>
+          </div>
+          <button class="menu-row" type="button" data-settings-alert="Local Data">
+            <span>Local Data</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="menu-row" type="button" data-settings-alert="Terms And Conditions">
+            <span>Terms And Conditions</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </nav>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 12 — EMERGENCY DETAIL -->
+  <section class="screen" data-screen="emergency-detail">
+    <div class="dev-tag">View Emergency</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" id="detail-back-btn" aria-label="Back">←</button>
+        <h2 id="detail-title">Flooded Area</h2>
+      </div>
+
+      <div class="detail-body">
+        <div class="detail-top">
+          <span class="detail-icon-badge"><img id="detail-icon-img" src="!assets/!buttons/Flood.png" alt=""></span>
+          <div class="loc-text">
+            <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
+            <span id="detail-loc-text">—</span>
+          </div>
+        </div>
+
+        <p class="section-title">Description</p>
+        <p class="detail-desc" id="detail-desc"></p>
+
+        <div id="detail-media-block">
+          <p class="section-title">Images/Videos</p>
+          <div class="detail-gallery" id="detail-gallery"></div>
+        </div>
+
+        <div class="audio-player-row" id="detail-audio-row" hidden>
+          <button type="button" class="audio-play-btn" aria-label="Play recording">
+            <svg viewBox="0 0 12 14" fill="currentColor"><path d="M1 1 11 7 1 13Z"/></svg>
+          </button>
+          <span>Recorded audio</span>
+        </div>
+
+        <div class="tips-block">
+          <p class="tips-flag">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="11" r="0.9" fill="currentColor"/></svg>
+            Tips that might be helpful
+          </p>
+          <p class="tips-heading" id="detail-tips-heading">If you're near this emergency:</p>
+          <ol class="tips-list" id="detail-tips-list"></ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 13 — COMMUNITY POSTS -->
+  <section class="screen" data-screen="community-posts">
+    <div class="dev-tag">Community Posts</div>
+
+    <div class="card home-card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="community-header">
+        <h2>Community Posts</h2>
+        <button class="mode-switch-btn" id="btn-exit-community" type="button" aria-label="Back to Emergencies">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M12 4 6 10l6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="post-feed" id="post-feed"><!-- rendered by app.js --></div>
+
+      <button class="fab" id="btn-new-post" type="button" aria-label="Create a community post">
+        <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v14M3 10h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+
+      <nav class="tab-bar">
+        <button class="tab-item" type="button" data-community-tab-goto="home">
+          <svg viewBox="0 0 22 20" fill="none"><path d="M2 9 11 2l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H3a1 1 0 0 1-1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="tab-item is-active" type="button" data-community-tab-goto="emergencies">
+          <svg viewBox="0 0 22 20" fill="none"><path d="M11 1 1 18h20L11 1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11 8v4" stroke="currentColor" stroke-width="1.6"/><circle cx="11" cy="15" r="1" fill="currentColor"/></svg>
+          <span>Emergencies</span>
+        </button>
+        <button class="tab-item" type="button" data-community-tab-goto="maps">
+          <svg viewBox="0 0 22 20" fill="none"><path d="M8 2 1 4v14l7-2 6 2 7-2V2l-7 2-6-2Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 2v14M14 4v14" stroke="currentColor" stroke-width="1.6"/></svg>
+          <span>Maps</span>
+        </button>
+        <button class="tab-item" type="button" data-community-tab-goto="guide">
+          <svg viewBox="0 0 20 20" fill="none"><path d="M2 3h7v15H2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M18 3h-7v15h7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <span>Guide</span>
+        </button>
+        <button class="tab-item" type="button" data-community-tab-goto="profile">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="6" r="4" stroke="currentColor" stroke-width="1.6"/><path d="M2 18c1.5-4 5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Profile</span>
+        </button>
+      </nav>
+    </div>
+  </section>
+
+  <!-- SCREEN 14 — CREATE COMMUNITY POST -->
+  <section class="screen" data-screen="create-post">
+    <div class="dev-tag">Create Post</div>
+
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" data-goto="community-posts" aria-label="Back">←</button>
+        <h2>Create Community Post</h2>
+      </div>
+
+      <div class="report-body">
+        <label class="upload-box" id="post-upload-box">
+          <input type="file" id="post-media-input" accept="image/*,video/*" hidden multiple>
+          <svg viewBox="0 0 24 20" fill="none"><rect x="1" y="3" width="22" height="16" rx="2.5" stroke="currentColor" stroke-width="1.4"/><circle cx="7.5" cy="9" r="2" stroke="currentColor" stroke-width="1.4"/><path d="m2 16 5.5-5.5L11 14l4-4 7 6" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+          <span>Upload Photo/Video</span>
+        </label>
+        <div class="post-media-preview" id="post-media-preview"></div>
+
+        <div>
+          <p class="field-label">Title <span class="required">*</span></p>
+          <div class="input-card-box">
+            <input type="text" id="post-title-input" placeholder="e.g. Free meals available for those in need">
+          </div>
+        </div>
+
+        <div>
+          <p class="field-label">Description <span class="required">*</span></p>
+          <div class="input-card-box">
+            <textarea id="post-desc-input" rows="4" placeholder="Share details for your neighbors..."></textarea>
+          </div>
+        </div>
+
+        <div>
+          <p class="field-label">Location <span class="optional">(optional)</span></p>
+          <div class="location-card-box">
+            <div class="loc-text">
+              <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
+              <span id="post-loc-text">Pamantasan ng Lungsod ng Maynila</span>
+            </div>
+            <button class="change-link" type="button" id="btn-post-change-location">Change</button>
+          </div>
+        </div>
+
+        <p class="form-error" id="post-error" hidden></p>
+      </div>
+
+      <div class="settings-actions">
+        <button type="button" class="btn-outline" data-goto="community-posts">Cancel</button>
+        <button type="button" class="btn-primary-red" id="btn-submit-post">Post</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SHARED: SELECT LOCATION BOTTOM SHEET (used by Report Emergency + Setup SOS) -->
+  <div class="sheet-overlay" id="location-sheet-overlay">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <button class="back-btn" id="location-sheet-back" aria-label="Back">←</button>
+        <h3>Select Location</h3>
+      </div>
+
+      <label class="sheet-search">
+        <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m18 18-3.8-3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <input type="text" id="location-search-input" placeholder="Search Address">
+      </label>
+
+      <div class="mini-map">
+        <img class="mini-map-img" src="!assets/!images/samar-map.png" alt="Map of Balangiga, Eastern Samar">
+        <span class="mini-map-you-here">You are here</span>
+        <button class="track-location-pill" type="button" id="track-location-btn">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
+          Track my location
+        </button>
+      </div>
+
+      <div class="mini-map-address">
+        <img src="!assets/!buttons/Pin.png" alt="">
+        <span>Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+      </div>
+
+      <div class="sheet-fields">
+        <input type="text" id="loc-house-input" placeholder="House Number/Building, Flr (Optional)">
+        <input type="text" id="loc-street-input" class="is-focused" value="Buenavista-Lawaan Rd., Balangiga">
+        <input type="text" id="loc-city-input" value="Eastern Samar">
+      </div>
+
+      <button type="button" class="btn-primary-red" id="confirm-location-btn">Confirm Location</button>
+    </div>
+  </div>
+
 </div>
 
-<script src="js/api.js"></script>
-<script src="js/app.js"></script>
+<script src="!js/api.js"></script>
+<script src="!js/app.js"></script>
 </body>
 </html>
