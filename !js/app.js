@@ -136,9 +136,11 @@
 
     const { responders } = await BayanihanAPI.getNearbyResponders();
     const list = document.getElementById('responder-list');
-    list.innerHTML = responders
-      .map((r) => `<li><span class="dot-status"></span> ${r.name} <em>${r.distanceKm} km</em></li>`)
-      .join('');
+    if (list) {
+      list.innerHTML = responders
+        .map((r) => `<li><span class="dot-status"></span> ${r.name} <em>${r.distanceKm} km</em></li>`)
+        .join('');
+    }
 
     showScreen('home');
     setTab('home');
@@ -774,6 +776,40 @@
     });
   });
 
+  /* --------------------------------- MAPS TAB INTERACTION --------------------------------- */
+  /* --------------------------------- MAPS TAB LAYER SWITCHER --------------------------------- */
+  const mapFabBtn = document.getElementById('btn-map-fab');
+  const mapFabContainer = document.getElementById('map-fab-container');
+  const menuItems = document.querySelectorAll('.fab-menu-item');
+  const mapBgLayer = document.getElementById('map-bg-layer');
+  const mapPin = document.getElementById('map-pin');
+  const mapPinLabel = document.getElementById('map-pin-label');
+
+  if (mapFabBtn && mapFabContainer) {
+    mapFabBtn.addEventListener('click', () => {
+    mapFabContainer.classList.toggle('is-active');
+    });
+    }
+
+    menuItems.forEach((item) => {
+  item.addEventListener('click', () => {
+    menuItems.forEach((mi) => mi.classList.remove('is-selected'));
+    item.classList.add('is-selected');
+
+    const newImageSrc = item.getAttribute('data-img');
+    if (newImageSrc && mapBgLayer) {
+      mapBgLayer.src = newImageSrc;
+    }
+
+    const targetTop = item.getAttribute('data-top');
+    const targetLeft = item.getAttribute('data-left');
+
+    if (mapPin) {
+      if (targetTop) mapPin.style.top = targetTop;
+      if (targetLeft) mapPin.style.left = targetLeft;
+    }
+    });
+  });
   /* ------------------------------- OPENING -------------------------------- */
   // Auto-advance from the opening screen after a short beat, same as tapping.
   setTimeout(() => {

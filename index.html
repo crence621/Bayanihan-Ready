@@ -237,15 +237,58 @@
       </div>
 
       <!-- MAPS TAB -->
-      <div class="tab-panel" data-tab="maps">
-        <div class="map-panel">
-          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
-          <div class="panel-inner floating">
-            <h3>Nearby Responders</h3>
-            <ul class="responder-list" id="responder-list"></ul>
-          </div>
-        </div>
+<!-- MAPS TAB -->
+<div class="tab-panel" data-tab="maps">
+  <div class="map-panel map-fullscreen">
+    
+    <!-- Main Background Map -->
+    <img class="full-satellite-map" id="map-bg-layer" src="!assets/!images/mapsatellite1.png" alt="Satellite Map">
+    
+    <!-- Orange Map Pin -->
+    <div class="map-pin-orange" id="map-pin" style="top: 72%; left: 68%;">
+      <img src="!assets/!images/orangemappin.png" alt="Map Pin">
+    </div>
+
+    <!-- Interactive FAB & Horizontal Menu (MUST BE PRESENT) -->
+    <div class="map-fab-container" id="map-fab-container">
+      
+      <!-- Menu Options -->
+      <div class="map-fab-menu" id="map-fab-menu">
+        <button class="fab-menu-item is-selected" type="button" data-layer="satellite" data-img="!assets/!images/mapsatellite1.png" data-top="72%" data-left="68%">
+          <img src="!assets/!buttons/defsatellite.png" alt="">
+          <span>Satellite</span>
+        </button>
+
+        <button class="fab-menu-item" type="button" data-layer="weather" data-img="!assets/!images/mapsweather1.png" data-top="72%" data-left="68%">
+          <img src="!assets/!buttons/defcloud.png" alt="">
+          <span>Weather</span>
+        </button>
+
+        <button class="fab-menu-item" type="button" data-layer="evacuation" data-img="!assets/!images/mapsevacuation1.png" data-top="65%" data-left="54%">
+          <img src="!assets/!buttons/defevac.png" alt="">
+          <span>Evacuation</span>
+        </button>
+
+        <button class="fab-menu-item" type="button" data-layer="flood" data-img="!assets/!images/mapflood1.png" data-top="36%" data-left="52%">
+          <img src="!assets/!buttons/defflood.png" alt="">
+          <span>Flood</span>
+        </button>
+
+        <button class="fab-menu-item" type="button" data-layer="route" data-img="!assets/!images/mapfloodroute1.png" data-top="36%" data-left="52%">
+          <img src="!assets/!buttons/defroute.png" alt="">
+          <span>Route</span>
+        </button>
       </div>
+      
+      <!-- Animated Toggle Button -->
+      <button class="fab-map-toggle" id="btn-map-fab" type="button" aria-label="Toggle map options">
+        <img src="!assets/!buttons/floatactbutton.png" class="fab-icon-plus" alt="Open Menu">
+        <img src="!assets/!buttons/floatxactbutton.png" class="fab-icon-x" alt="Close Menu">
+      </button>
+    </div>
+
+  </div>
+</div>
 
       <!-- GUIDE TAB PANEL -->
       <div class="tab-panel" data-tab="guide">

@@ -92,7 +92,9 @@ const BayanihanAPI = (() => {
     },
 
     /* ---------------------------------------------------------------
-       NEARBY RESPONDERS
+       CHANGE THIS INTO MAPS   INSTEAD OF NEARBY RESPONDERS
+    
+    NEARBY RESPONDERS
        Real version: GET /api/responders/nearby?lat=&lng=
        For now, returns fixed sample data regardless of coordinates.
     --------------------------------------------------------------- */

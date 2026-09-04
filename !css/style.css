@@ -1786,6 +1786,165 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 }
 .input-card-box textarea::placeholder{ color:#999; }
 
+
+/* ================================================================
+   FULLSCREEN MAP & EXPANDING FAB
+   ================================================================ */
+.map-fullscreen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0B0B0C;
+}
+
+.full-satellite-map {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Clean Orange Pin Overlay */
+.map-pin-orange {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.map-pin-orange img { 
+  width: 32px; 
+  height: 32px; 
+  object-fit: contain; 
+}
+
+.map-pin-orange span {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 12px;
+  color: #111;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-shadow: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* --- Container & Menu Position Fix --- */
+.map-fab-container {
+  position: absolute;
+  right: 16px;
+  bottom: 75px; /* Moves the button cluster safely above the bottom tab bar */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 20;
+}
+
+.map-fab-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  padding: 8px 14px;
+  border-radius: 30px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  
+  /* Hidden state */
+  opacity: 0;
+  transform: translateX(20px) scale(0.9);
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Visible state when toggled */
+.map-fab-container.is-active .map-fab-menu {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Menu Items */
+.fab-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.fab-menu-item img { 
+  width: 18px; 
+  height: 18px; 
+  object-fit: contain; 
+}
+.full-map-layer {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Default unselected text color (black/dark gray) */
+.fab-menu-item span {
+  font-family: var(--font-body);
+  font-size: 9px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Active selected text color (Red) */
+.fab-menu-item.is-selected span { 
+  color: var(--red); 
+}
+
+/* --- Animated Button --- */
+.fab-map-toggle {
+  position: relative;
+  width: 56px; 
+  height: 56px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(229,52,46, 0.4);
+  flex: none;
+}
+
+.fab-map-toggle:active { transform: scale(0.94); }
+
+.fab-map-toggle img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+/* Default state: Plus is visible, X is hidden & rotated */
+.fab-icon-x {
+  opacity: 0;
+  transform: rotate(-90deg);
+}
+
+/* Active state: Plus hides & rotates, X shows & un-rotates */
+.map-fab-container.is-active .fab-icon-plus {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+.map-fab-container.is-active .fab-icon-x {
+  opacity: 1;
+  transform: rotate(0);
+}
+
 /* FUCK - clarence was here lol
 */
 
