@@ -810,6 +810,95 @@
     }
     });
   });
+
+  // --- Scrollable Menu Wheel & Drag Support ---
+  const fabMenu = document.getElementById('map-fab-menu');
+
+  if (fabMenu) {
+    fabMenu.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      fabMenu.scrollLeft += e.deltaY;
+    });
+
+    let isDown = false;
+    let startX;
+    let scrollLeft;
+
+    fabMenu.addEventListener('mousedown', (e) => {
+      isDown = true;
+      startX = e.pageX - fabMenu.offsetLeft;
+      scrollLeft = fabMenu.scrollLeft;
+    });
+    
+    fabMenu.addEventListener('mouseleave', () => { isDown = false; });
+    fabMenu.addEventListener('mouseup', () => { isDown = false; });
+    
+    fabMenu.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - fabMenu.offsetLeft;
+      const walk = (x - startX) * 2;
+      fabMenu.scrollLeft = scrollLeft - walk;
+    });
+  }
+  
+  /* --------------------------------- MAP PAN & ZOOM INTERACTION --------------------------------- */
+  const mapViewport = document.getElementById('map-viewport');
+  const mapTransformContainer = document.getElementById('map-transform-container');
+
+  let scale = 1;
+  let pointX = 0;
+  let pointY = 0;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+
+  function updateMapTransform() {
+    if (mapTransformContainer) {
+      mapTransformContainer.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
+    }
+  }
+
+  if (mapViewport && mapTransformContainer) {
+    mapViewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.map-fab-container')) return;
+      isDragging = true;
+      startX = e.clientX - pointX;
+      startY = e.clientY - pointY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      pointX = e.clientX - startX;
+      pointY = e.clientY - startY;
+      updateMapTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    mapViewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomIntensity = 0.1;
+      if (e.deltaY < 0) {
+        scale *= (1 + zoomIntensity);
+      } else {
+        scale /= (1 + zoomIntensity);
+      }
+
+      scale = Math.max(1, Math.min(scale, 4));
+
+      if (scale === 1) {
+        pointX = 0;
+        pointY = 0;
+      }
+
+      updateMapTransform();
+    }, { passive: false });
+  }
+
   /* ------------------------------- OPENING -------------------------------- */
   // Auto-advance from the opening screen after a short beat, same as tapping.
   setTimeout(() => {

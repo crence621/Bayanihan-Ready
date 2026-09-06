@@ -1805,6 +1805,20 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   display: block;
 }
 
+.map-transform-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  cursor: grab;
+  touch-action: none;
+}
+
+.map-transform-container:active {
+  cursor: grabbing;
+}
+
 /* Clean Orange Pin Overlay */
 .map-pin-orange {
   position: absolute;
@@ -1832,49 +1846,70 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }
 
-/* --- Container & Menu Position Fix --- */
+/* --- Container limits the width so it doesn't go off-screen --- */
 .map-fab-container {
   position: absolute;
   right: 16px;
-  bottom: 75px; /* Moves the button cluster safely above the bottom tab bar */
+  bottom: 75px;
+  width: calc(100% - 32px); /* Spans the screen minus margins */
   display: flex;
   align-items: center;
+  justify-content: flex-end; /* Keeps the red button anchored to the right */
   gap: 10px;
   z-index: 20;
+  pointer-events: none; /* Lets you click the map in the empty space */
 }
 
+/* --- Menu wrapper handles the scroll --- */
 .map-fab-menu {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   background: #ffffff;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 30px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   
-  /* Hidden state */
+  /* Scrolling Magic */
+  max-width: calc(100% - 66px); /* Leaves room for the 56px FAB + 10px gap */
+  overflow-x: auto; /* Enables horizontal scroll */
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on mobile */
+  
+  /* Hide scrollbar */
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  
+  /* Hidden state animation */
   opacity: 0;
   transform: translateX(20px) scale(0.9);
-  pointer-events: none;
+  transform-origin: right center;
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* Visible state when toggled */
+.map-fab-menu::-webkit-scrollbar {
+  display: none; /* Hides scrollbar on Chrome/Safari/Edge */
+}
+
+/* Visible state */
 .map-fab-container.is-active .map-fab-menu {
   opacity: 1;
   transform: translateX(0) scale(1);
-  pointer-events: auto;
+  pointer-events: auto; /* Makes the menu clickable */
 }
 
-/* Menu Items */
+/* --- Menu Items --- */
 .fab-menu-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: none;
   border: none;
   cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0; /* CRITICAL: Prevents icons from squishing, forcing the container to scroll */
+  min-width: 48px; /* Gives each item a consistent hit area */
 }
 
 .fab-menu-item img { 
@@ -1902,8 +1937,9 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   color: var(--red); 
 }
 
-/* --- Animated Button --- */
+/* --- Animated Button Fix --- */
 .fab-map-toggle {
+  pointer-events: auto; /* Ensures the red button is clickable */
   position: relative;
   width: 56px; 
   height: 56px;
