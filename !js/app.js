@@ -605,7 +605,9 @@
   const btnProofPhoto = document.getElementById('btn-proof-photo');
   const btnProofVideo = document.getElementById('btn-proof-video');
   const btnProofAudio = document.getElementById('btn-proof-audio');
-  let proofItems = []; // { type: 'photo' | 'audio', src? }
+  const btnProofGallery = document.getElementById('btn-proof-gallery');
+  const proofFileInput = document.getElementById('proof-file-input');
+  let proofItems = []; // { type: 'photo' | 'video' | 'audio', src? }
 
   function renderProofPreview() {
     proofPreviewContainer.innerHTML = proofItems
@@ -613,34 +615,213 @@
         if (item.type === 'photo') {
           return `<div class="proof-preview-item"><img src="${item.src}" alt="Attached photo"><button type="button" class="btn-remove-proof" data-remove="${i}" aria-label="Remove photo">✕</button></div>`;
         }
+        if (item.type === 'video') {
+          return `<div class="proof-preview-item proof-preview-video"><video src="${item.src}" muted playsinline></video><span class="video-badge">▶ video</span><button type="button" class="btn-remove-proof" data-remove="${i}" aria-label="Remove video">✕</button></div>`;
+        }
         return `<div class="proof-audio-row"><span class="audio-dot"></span><span>Recorded audio</span><button type="button" class="remove-link" data-remove="${i}">remove</button></div>`;
       })
       .join('');
 
     proofPreviewContainer.querySelectorAll('[data-remove]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        proofItems.splice(Number(btn.dataset.remove), 1);
+        const idx = Number(btn.dataset.remove);
+        const removed = proofItems[idx];
+        if (removed && removed.src && removed.src.startsWith('blob:')) {
+          URL.revokeObjectURL(removed.src);
+        }
+        proofItems.splice(idx, 1);
         renderProofPreview();
       });
     });
   }
 
-  function openCamera() { showScreen('camera'); }
-  btnProofPhoto.addEventListener('click', openCamera);
-  btnProofVideo.addEventListener('click', openCamera);
+  // --- Live camera (real device camera for photo + video capture) ---
+  const cameraFeed = document.getElementById('camera-feed');
+  const cameraCanvas = document.getElementById('camera-canvas');
+  const cameraCloseBtn = document.getElementById('camera-close');
+  const shutterBtn = document.getElementById('shutter-btn');
+  const cameraFlipBtn = document.getElementById('camera-flip-btn');
+  const cameraModeEls = document.querySelectorAll('.camera-modes span');
+  const cameraErrorEl = document.getElementById('camera-error');
+  const recIndicator = document.getElementById('rec-indicator');
+  const recTimerEl = document.getElementById('rec-timer');
 
-  document.getElementById('camera-close').addEventListener('click', () => showScreen('report-emergency'));
+  let cameraStream = null;
+  let facingMode = 'environment';
+  let currentCameraMode = 'photo'; // 'photo' | 'video'
+  let mediaRecorder = null;
+  let recordedChunks = [];
+  let recTimerInterval = null;
+  let recSeconds = 0;
 
-  document.getElementById('shutter-btn').addEventListener('click', () => {
+  async function startCameraStream() {
+    stopMediaTracks();
+    setError(cameraErrorEl, '');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError(cameraErrorEl, 'Camera not supported on this browser. Use "upload from gallery" instead.');
+      return;
+    }
+    const wantAudio = currentCameraMode === 'video';
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ audio: wantAudio, video: { facingMode } });
+    } catch (err) {
+      if (wantAudio) {
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode } });
+        } catch (err2) {
+          setError(cameraErrorEl, 'Camera access was blocked or unavailable. You can still upload from your gallery.');
+          return;
+        }
+      } else {
+        setError(cameraErrorEl, 'Camera access was blocked or unavailable. You can still upload from your gallery.');
+        return;
+      }
+    }
+    cameraFeed.srcObject = cameraStream;
+    cameraFeed.classList.toggle('is-mirrored', facingMode === 'user');
+  }
+
+  function stopMediaTracks() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      cameraStream = null;
+    }
+    if (cameraFeed) cameraFeed.srcObject = null;
+  }
+
+  function setCameraMode(mode) {
+    currentCameraMode = mode;
+    cameraModeEls.forEach((el) => el.classList.toggle('is-active', el.dataset.mode === mode));
+    startCameraStream();
+  }
+
+  cameraModeEls.forEach((el) => {
+    if (!el.dataset.mode) return;
+    el.addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') return; // don't switch mid-recording
+      setCameraMode(el.dataset.mode);
+    });
+  });
+
+  function openCamera(mode) {
+    showScreen('camera');
+    setCameraMode(mode);
+  }
+  btnProofPhoto.addEventListener('click', () => openCamera('photo'));
+  btnProofVideo.addEventListener('click', () => openCamera('video'));
+
+  function closeCameraScreen() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+    stopMediaTracks();
+    stopRecTimer();
+    recIndicator.hidden = true;
+    shutterBtn.classList.remove('is-recording');
+    showScreen('report-emergency');
+  }
+  cameraCloseBtn.addEventListener('click', closeCameraScreen);
+
+  if (cameraFlipBtn) {
+    cameraFlipBtn.addEventListener('click', () => {
+      facingMode = facingMode === 'environment' ? 'user' : 'environment';
+      startCameraStream();
+    });
+  }
+
+  function capturePhoto() {
     const flash = document.getElementById('capture-flash');
     flash.classList.add('is-visible');
-    setTimeout(() => {
-      flash.classList.remove('is-visible');
-      proofItems.push({ type: 'photo', src: '!assets/!images/image_20.png' });
+    setTimeout(() => flash.classList.remove('is-visible'), 250);
+
+    if (cameraStream && cameraFeed.videoWidth) {
+      const w = cameraFeed.videoWidth;
+      const h = cameraFeed.videoHeight;
+      cameraCanvas.width = w;
+      cameraCanvas.height = h;
+      const ctx = cameraCanvas.getContext('2d');
+      if (facingMode === 'user') {
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(cameraFeed, 0, 0, w, h);
+      const dataUrl = cameraCanvas.toDataURL('image/jpeg', 0.9);
+      proofItems.push({ type: 'photo', src: dataUrl });
       renderProofPreview();
-      showScreen('report-emergency');
-    }, 550);
+    }
+
+    setTimeout(closeCameraScreen, 250);
+  }
+
+  function toggleVideoRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      return;
+    }
+    if (!cameraStream) return;
+
+    recordedChunks = [];
+    try {
+      mediaRecorder = new MediaRecorder(cameraStream, { mimeType: 'video/webm;codecs=vp8,opus' });
+    } catch (e) {
+      mediaRecorder = new MediaRecorder(cameraStream);
+    }
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      proofItems.push({ type: 'video', src: url });
+      renderProofPreview();
+      stopRecTimer();
+      recIndicator.hidden = true;
+      shutterBtn.classList.remove('is-recording');
+      closeCameraScreen();
+    };
+    mediaRecorder.start();
+    shutterBtn.classList.add('is-recording');
+    recIndicator.hidden = false;
+    startRecTimer();
+  }
+
+  function startRecTimer() {
+    recSeconds = 0;
+    updateRecTimerText();
+    recTimerInterval = setInterval(() => {
+      recSeconds += 1;
+      updateRecTimerText();
+    }, 1000);
+  }
+  function stopRecTimer() {
+    clearInterval(recTimerInterval);
+    recTimerInterval = null;
+  }
+  function updateRecTimerText() {
+    const m = String(Math.floor(recSeconds / 60)).padStart(2, '0');
+    const s = String(recSeconds % 60).padStart(2, '0');
+    if (recTimerEl) recTimerEl.textContent = `${m}:${s}`;
+  }
+
+  shutterBtn.addEventListener('click', () => {
+    if (currentCameraMode === 'video') {
+      toggleVideoRecording();
+    } else {
+      capturePhoto();
+    }
   });
+
+  // --- Upload photos/videos from the gallery (works standalone, and as a
+  // fallback whenever camera access isn't available) ---
+  if (btnProofGallery && proofFileInput) {
+    btnProofGallery.addEventListener('click', () => proofFileInput.click());
+    proofFileInput.addEventListener('change', () => {
+      const files = Array.from(proofFileInput.files || []);
+      files.forEach((file) => {
+        const url = URL.createObjectURL(file);
+        const type = file.type.startsWith('video') ? 'video' : 'photo';
+        proofItems.push({ type, src: url });
+      });
+      renderProofPreview();
+      proofFileInput.value = '';
+    });
+  }
 
   btnProofAudio.addEventListener('click', () => {
     if (btnProofAudio.disabled) return;
@@ -687,6 +868,7 @@
       location: reportLocText.textContent,
       desc: notes || 'No additional details were provided for this report.',
       images: proofItems.filter((p) => p.type === 'photo').map((p) => p.src),
+      videos: proofItems.filter((p) => p.type === 'video').map((p) => p.src),
       hasAudio: proofItems.some((p) => p.type === 'audio'),
       mine: true,
     });
@@ -699,6 +881,12 @@
     });
     renderNotifications();
     if (bellDot) bellDot.style.display = 'block';
+
+    proofItems.forEach((item) => {
+      if (item.src && item.src.startsWith('blob:')) URL.revokeObjectURL(item.src);
+    });
+    proofItems = [];
+    renderProofPreview();
 
     successOverlay.classList.add('is-open');
   });
