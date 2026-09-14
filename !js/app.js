@@ -371,11 +371,18 @@
 
     const mediaBlock = document.getElementById('detail-media-block');
     const gallery = document.getElementById('detail-gallery');
-    if (item.images && item.images.length) {
+    const images = item.images || [];
+    const videos = item.videos || [];
+    if (images.length || videos.length) {
       mediaBlock.hidden = false;
-      gallery.innerHTML = item.images
-        .map((src) => `<div class="dg-item"><img src="${src}" alt=""></div>`)
-        .join('');
+      gallery.innerHTML =
+        images.map((src) => `<div class="dg-item"><img src="${src}" alt=""></div>`).join('') +
+        videos
+          .map(
+            (src) =>
+              `<div class="dg-item dg-item-video"><video src="${src}" controls playsinline preload="metadata"></video></div>`
+          )
+          .join('');
     } else {
       mediaBlock.hidden = true;
       gallery.innerHTML = '';
@@ -585,8 +592,8 @@
   function renderNotifications() {
     notifList.innerHTML = notifications
       .map(
-        (n) => `
-      <div class="notif-item">
+        (n, i) => `
+      <div class="notif-item"${n.emergencyId ? ` data-notif-index="${i}" role="button" tabindex="0" style="cursor:pointer;"` : ''}>
         <span class="notif-icon">${n.icon === 'bell' ? BELL_SVG : `<img src="${n.icon}" alt="">`}</span>
         <div class="notif-text">
           <h4>${n.title}</h4>
@@ -597,6 +604,23 @@
       .join('');
   }
   renderNotifications();
+
+  // Tapping a notification that's tied to a reported emergency jumps
+  // straight to that emergency's detail screen.
+  notifList.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-notif-index]');
+    if (!el) return;
+    const n = notifications[Number(el.dataset.notifIndex)];
+    if (n && n.emergencyId) openEmergencyDetail(n.emergencyId);
+  });
+  notifList.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('[data-notif-index]');
+    if (!el) return;
+    e.preventDefault();
+    const n = notifications[Number(el.dataset.notifIndex)];
+    if (n && n.emergencyId) openEmergencyDetail(n.emergencyId);
+  });
 
   document.getElementById('bell-btn').addEventListener('click', () => {
     if (bellDot) bellDot.style.display = 'none';
@@ -1013,6 +1037,7 @@
       icon: '!assets/!images/first-aid.png',
       title: 'Help is on Route',
       body: 'Please Stay Safe',
+      emergencyId: incident.id,
     });
     renderNotifications();
     if (bellDot) bellDot.style.display = 'block';
