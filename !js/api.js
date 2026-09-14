@@ -11,6 +11,13 @@ const BayanihanAPI = (() => {
   const delay = (ms = 500) => new Promise((res) => setTimeout(res, ms));
   const uid = () => Math.random().toString(36).slice(2, 10);
 
+  // Simple but solid email format check (not exhaustive RFC 5322, but
+  // catches the vast majority of malformed input: missing "@", missing
+  // domain, spaces, missing TLD, etc.)
+  const isValidEmail = (email) =>
+    typeof email === 'string' &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+
   return {
 
     /* ---------------------------------------------------------------
@@ -28,6 +35,9 @@ const BayanihanAPI = (() => {
 
       if (!name || !email || !password) {
         return { success: false, error: 'Please fill in every field.' };
+      }
+      if (!isValidEmail(email)) {
+        return { success: false, error: 'Please enter a valid email address.' };
       }
       if (password.length < 8) {
         return { success: false, error: 'Password must be at least 8 characters.' };
@@ -49,6 +59,10 @@ const BayanihanAPI = (() => {
     --------------------------------------------------------------- */
     async logIn({ email, password }) {
       await delay();
+
+      if (!isValidEmail(email)) {
+        return { success: false, error: 'Please enter a valid email address.' };
+      }
 
       const user = db.users.find(
         (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
