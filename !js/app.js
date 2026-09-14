@@ -221,7 +221,9 @@
       location: '6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar',
       desc: 'A severe flooding incident has been reported in this area. Rising water levels have affected nearby homes and roads, posing risks to residents and travelers. Emergency services are urgently needed to assist with evacuation, provide medical aid, and ensure public safety.',
       images: ['!assets/!images/flood-rescue-1.png', '!assets/!images/flood-rescue-2.png'],
-      hasAudio: true,
+      // No sample audio file ships with this seed post yet — leave empty
+      // so the player row stays hidden instead of showing a dead button.
+      audios: [],
       mine: false,
     },
     {
@@ -231,7 +233,7 @@
       location: 'Brgy. San Miguel, Basey City, Eastern Samar',
       desc: 'A critical medical situation has been reported in this area. A resident is experiencing severe health complications and requires immediate assistance.',
       images: [],
-      hasAudio: false,
+      audios: [],
       mine: false,
     },
   ];
@@ -305,6 +307,59 @@
     });
   });
 
+  // --- Shared audio playback helper (used by the proof preview during a
+  // report AND by the emergency detail screen once it's posted) ---
+  const PLAY_ICON = '<svg viewBox="0 0 12 14" fill="currentColor"><path d="M1 1 11 7 1 13Z"/></svg>';
+  const PAUSE_ICON = '<svg viewBox="0 0 12 14" fill="currentColor"><rect x="1" y="1" width="3.4" height="12"/><rect x="7.6" y="1" width="3.4" height="12"/></svg>';
+
+  function formatAudioTime(sec) {
+    if (!isFinite(sec) || sec < 0) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  // Only one clip should play at a time across the whole app.
+  let currentlyPlayingAudio = null;
+
+  // Wires a play/pause button to an <audio> element. Safe to call once per
+  // (button, audio) pair — call again after changing audioEl.src to reset.
+  function wireAudioButton(btn, audioEl, timeEl) {
+    if (!btn || !audioEl) return;
+    const setIcon = (playing) => { btn.innerHTML = playing ? PAUSE_ICON : PLAY_ICON; };
+    setIcon(false);
+
+    audioEl.addEventListener('loadedmetadata', () => {
+      if (timeEl && isFinite(audioEl.duration)) timeEl.textContent = formatAudioTime(audioEl.duration);
+    });
+    audioEl.addEventListener('timeupdate', () => {
+      if (timeEl && !audioEl.paused) timeEl.textContent = formatAudioTime(audioEl.currentTime);
+    });
+    audioEl.addEventListener('play', () => {
+      if (currentlyPlayingAudio && currentlyPlayingAudio !== audioEl) currentlyPlayingAudio.pause();
+      currentlyPlayingAudio = audioEl;
+      setIcon(true);
+    });
+    const resetIcon = () => {
+      setIcon(false);
+      if (timeEl && isFinite(audioEl.duration)) timeEl.textContent = formatAudioTime(audioEl.duration);
+    };
+    audioEl.addEventListener('pause', resetIcon);
+    audioEl.addEventListener('ended', () => { audioEl.currentTime = 0; resetIcon(); });
+
+    btn.onclick = () => {
+      if (audioEl.paused) audioEl.play().catch(() => {});
+      else audioEl.pause();
+    };
+  }
+
+  // The detail screen's player is a single static element — wire it once,
+  // then just swap its src whenever a different report is opened.
+  const detailAudioBtn = document.getElementById('detail-audio-play-btn');
+  const detailAudioEl = document.getElementById('detail-audio-el');
+  const detailAudioTime = document.getElementById('detail-audio-time');
+  wireAudioButton(detailAudioBtn, detailAudioEl, detailAudioTime);
+
   function openEmergencyDetail(id) {
     const item = [...myEmergencies, ...othersEmergencies].find((i) => i.id === id);
     if (!item) return;
@@ -326,7 +381,21 @@
       gallery.innerHTML = '';
     }
 
-    document.getElementById('detail-audio-row').hidden = !item.hasAudio;
+    const audios = item.audios || [];
+    const audioRow = document.getElementById('detail-audio-row');
+    audioRow.hidden = !audios.length;
+    if (audios.length) {
+      if (detailAudioEl) {
+        detailAudioEl.pause();
+        detailAudioEl.src = audios[0];
+        detailAudioEl.currentTime = 0;
+        if (detailAudioTime) detailAudioTime.textContent = '';
+      }
+    } else if (detailAudioEl) {
+      detailAudioEl.pause();
+      detailAudioEl.removeAttribute('src');
+      detailAudioEl.load();
+    }
 
     const tips = TYPE_TIPS[item.type] || TYPE_TIPS.default;
     document.getElementById('detail-tips-heading').textContent = item.mine
@@ -338,6 +407,7 @@
   }
 
   document.getElementById('detail-back-btn').addEventListener('click', async () => {
+    if (detailAudioEl) detailAudioEl.pause();
     await enterHome();
     setTab('emergencies');
   });
@@ -618,15 +688,32 @@
         if (item.type === 'video') {
           return `<div class="proof-preview-item proof-preview-video"><video src="${item.src}" muted playsinline></video><span class="video-badge">▶ video</span><button type="button" class="btn-remove-proof" data-remove="${i}" aria-label="Remove video">✕</button></div>`;
         }
-        return `<div class="proof-audio-row"><span class="audio-dot"></span><span>Recorded audio</span><button type="button" class="remove-link" data-remove="${i}">remove</button></div>`;
+        // Recorded audio — real, playable clip (or a placeholder if
+        // recording somehow produced no data).
+        return `<div class="proof-audio-row">
+          <button type="button" class="audio-play-btn" data-play-audio="${i}" aria-label="Play recording"${item.src ? '' : ' disabled'}>
+            <svg viewBox="0 0 12 14" fill="currentColor"><path d="M1 1 11 7 1 13Z"/></svg>
+          </button>
+          <span>Recorded audio</span>
+          <span class="audio-time" data-audio-time="${i}"></span>
+          <button type="button" class="remove-link" data-remove="${i}">remove</button>
+          ${item.src ? `<audio data-audio-el="${i}" src="${item.src}" preload="metadata" style="display:none"></audio>` : ''}
+        </div>`;
       })
       .join('');
+
+    proofPreviewContainer.querySelectorAll('[data-play-audio]').forEach((btn) => {
+      const idx = btn.dataset.playAudio;
+      const audioEl = proofPreviewContainer.querySelector(`[data-audio-el="${idx}"]`);
+      const timeEl = proofPreviewContainer.querySelector(`[data-audio-time="${idx}"]`);
+      wireAudioButton(btn, audioEl, timeEl);
+    });
 
     proofPreviewContainer.querySelectorAll('[data-remove]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const idx = Number(btn.dataset.remove);
         const removed = proofItems[idx];
-        if (removed && removed.src && removed.src.startsWith('blob:')) {
+        if (removed && removed.src && removed.src.startsWith('blob:') && removed === proofItems[idx]) {
           URL.revokeObjectURL(removed.src);
         }
         proofItems.splice(idx, 1);
@@ -823,19 +910,65 @@
     });
   }
 
-  btnProofAudio.addEventListener('click', () => {
-    if (btnProofAudio.disabled) return;
+  // --- Voice recording proof (real mic capture via MediaRecorder) ---
+  let audioStream = null;
+  let audioRecorder = null;
+  let audioChunks = [];
+
+  function setAudioButtonRecording(isRecording) {
+    btnProofAudio.classList.toggle('is-recording', isRecording);
     const label = btnProofAudio.querySelector('span');
-    const original = label.innerHTML;
+    label.innerHTML = isRecording ? 'Recording…<br>tap to stop' : 'Voice<br>Recording';
+  }
+
+  async function toggleAudioRecording() {
+    if (audioRecorder && audioRecorder.state === 'recording') {
+      audioRecorder.stop(); // onstop handles the rest
+      return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Audio recording isn\u2019t supported on this browser.');
+      return;
+    }
+
     btnProofAudio.disabled = true;
-    label.textContent = 'Recording…';
-    setTimeout(() => {
-      label.innerHTML = original;
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      alert('Microphone access was blocked or unavailable.');
       btnProofAudio.disabled = false;
-      proofItems.push({ type: 'audio' });
+      return;
+    }
+
+    audioChunks = [];
+    try {
+      audioRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm;codecs=opus' });
+    } catch (e) {
+      audioRecorder = new MediaRecorder(audioStream);
+    }
+
+    audioRecorder.ondataavailable = (e) => { if (e.data && e.data.size) audioChunks.push(e.data); };
+    audioRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, { type: audioRecorder.mimeType || 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      proofItems.push({ type: 'audio', src: url });
       renderProofPreview();
-    }, 1200);
-  });
+
+      if (audioStream) {
+        audioStream.getTracks().forEach((t) => t.stop());
+        audioStream = null;
+      }
+      setAudioButtonRecording(false);
+      btnProofAudio.disabled = false;
+    };
+
+    audioRecorder.start();
+    btnProofAudio.disabled = false;
+    setAudioButtonRecording(true);
+  }
+
+  btnProofAudio.addEventListener('click', toggleAudioRecording);
 
   // --- Submit report + success modal ---
   const successOverlay = document.getElementById('success-overlay');
@@ -860,6 +993,7 @@
 
     const selectedType = document.querySelector('.type-card.is-selected');
     const type = (selectedType && selectedType.dataset.type) || 'Other';
+    const audios = proofItems.filter((p) => p.type === 'audio' && p.src).map((p) => p.src);
 
     myEmergencies.unshift({
       id: incident.id,
@@ -869,7 +1003,8 @@
       desc: notes || 'No additional details were provided for this report.',
       images: proofItems.filter((p) => p.type === 'photo').map((p) => p.src),
       videos: proofItems.filter((p) => p.type === 'video').map((p) => p.src),
-      hasAudio: proofItems.some((p) => p.type === 'audio'),
+      audios,
+      hasAudio: audios.length > 0,
       mine: true,
     });
     renderEmergencyFeed();
@@ -882,9 +1017,9 @@
     renderNotifications();
     if (bellDot) bellDot.style.display = 'block';
 
-    proofItems.forEach((item) => {
-      if (item.src && item.src.startsWith('blob:')) URL.revokeObjectURL(item.src);
-    });
+    // Ownership of any recorded blob URLs (audio/video) transfers to the
+    // report saved above — they need to stay alive so it's replayable from
+    // the emergency detail screen, so we only clear the composer's list.
     proofItems = [];
     renderProofPreview();
 

@@ -39,6 +39,21 @@
     position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.55);
     color: #fff; font-size: 11px; padding: 2px 5px; border-radius: 6px; pointer-events: none;
   }
+  .audio-play-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; min-width: 30px; border-radius: 50%; border: none;
+    background: #c0392b; color: #fff; cursor: pointer; flex-shrink: 0;
+  }
+  .audio-play-btn svg { width: 12px; height: 14px; }
+  .audio-play-btn[disabled] { opacity: .5; cursor: default; }
+  .audio-time { font-size: 12px; color: #6b6b6b; margin-left: auto; }
+  .proof-audio-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-radius: 10px; background: #f6f6f6; margin-bottom: 8px;
+  }
+  .proof-audio-row .remove-link { margin-left: auto; }
+  #btn-proof-audio.is-recording { background: #ffece9; border-color: #ff3b30; }
+  #btn-proof-audio.is-recording span { color: #c0392b; }
 </style>
 </head>
 <body>
@@ -1106,10 +1121,12 @@
         </div>
 
         <div class="audio-player-row" id="detail-audio-row" hidden>
-          <button type="button" class="audio-play-btn" aria-label="Play recording">
+          <button type="button" class="audio-play-btn" id="detail-audio-play-btn" aria-label="Play recording">
             <svg viewBox="0 0 12 14" fill="currentColor"><path d="M1 1 11 7 1 13Z"/></svg>
           </button>
           <span>Recorded audio</span>
+          <span class="audio-time" id="detail-audio-time"></span>
+          <audio id="detail-audio-el" preload="metadata" style="display:none"></audio>
         </div>
 
         <div class="tips-block">
