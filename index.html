@@ -6,6 +6,7 @@
 <title>Bayanihan Ready</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="!css/leaflet.css">
 <link rel="stylesheet" href="!css/style.css">
 <style>
   .camera-view, .camera-preview, .camera-topbar { position: relative; }
@@ -258,7 +259,7 @@
       <!-- HOME TAB -->
       <div class="tab-panel is-active" data-tab="home">
         <div class="map-panel">
-          <img class="card-map full" src="!assets/!images/manila-map.jpg" alt="" aria-hidden="true">
+          <div class="home-bg-map" id="home-bg-map" aria-hidden="true"></div>
           <p class="help-copy">Help is just a click away!<br>Click <b>SOS button</b> to call the help.</p>
           <p class="coords" id="home-coords" hidden></p>
 
@@ -291,59 +292,91 @@
         <!-- MAPS TAB -->
       <div class="tab-panel" data-tab="maps">
         <div class="map-panel map-fullscreen" id="map-viewport">
-    
-        <!-- Movable & Zoomable Wrapper -->
-        <div class="map-transform-container" id="map-transform-container">
-      
-        <!-- Main Background Map -->
-        <img class="full-satellite-map" id="map-bg-layer" src="!assets/!images/mapsatellite1.png" alt="Map View">
-      
-        <!-- Orange Map Pin (Moves & scales with the map) -->
-      <div class="map-pin-orange" id="map-pin" style="top: 72%; left: 68%;">
-        <img src="!assets/!images/orangemappin.png" alt="Map Pin">
-      </div>
 
-    </div>
+          <!-- Live map (Leaflet + OpenStreetMap) -->
+          <div class="live-map" id="live-map" role="application" aria-label="Interactive map of the Philippines"></div>
 
-    <!-- Interactive FAB & Horizontal Menu (Stays fixed on screen) -->
-    <div class="map-fab-container" id="map-fab-container">
-      <div class="map-fab-menu" id="map-fab-menu">
-        <button class="fab-menu-item is-selected" type="button" data-layer="satellite" data-img="!assets/!images/mapsatellite1.png" data-top="72%" data-left="68%">
-          <img src="!assets/!buttons/defsatellite.png" alt="">
-          <span>Satellite</span>
-        </button>
-        <button class="fab-menu-item" type="button" data-layer="topography" data-img="!assets/!images/maptopography1.png" data-top="38%" data-left="70%">
-          <img src="!assets/!buttons/deftopography.png" alt="">
-          <span>Topography</span>
-        </button>
-        <button class="fab-menu-item" type="button" data-layer="landslide" data-img="!assets/!images/maplandsliderisk1.png" data-top="36%" data-left="51%">
-          <img src="!assets/!buttons/deflandsliderisk.png" alt="">
-          <span>Landslide Risk</span>
-        </button>
-        <button class="fab-menu-item" type="button" data-layer="weather" data-img="!assets/!images/mapsweather1.png" data-top="72%" data-left="68%">
-          <img src="!assets/!buttons/defcloud.png" alt="">
-          <span>Weather</span>
-        </button>
-        <button class="fab-menu-item" type="button" data-layer="evacuation" data-img="!assets/!images/mapsevacuation1.png" data-top="65%" data-left="54%">
-          <img src="!assets/!buttons/defevac.png" alt="">
-          <span>Evacuation</span>
-        </button>
-        <button class="fab-menu-item" type="button" data-layer="flood" data-img="!assets/!images/mapflood1.png" data-top="36%" data-left="52%">
-          <img src="!assets/!buttons/defflood.png" alt="">
-          <span>Flood</span>
-        </button>
-        <button class="fab-menu-item" type="button" data-layer="route" data-img="!assets/!images/mapfloodroute1.png" data-top="36%" data-left="52%">
-          <img src="!assets/!buttons/defroute.png" alt="">
-          <span>Route</span>
-        </button>
-      </div>
-      <button class="fab-map-toggle" id="btn-map-fab" type="button" aria-label="Toggle map options">
-        <img src="!assets/!buttons/floatactbutton.png" class="fab-icon-plus" alt="Open Menu">
-        <img src="!assets/!buttons/floatxactbutton.png" class="fab-icon-x" alt="Close Menu">
-      </button>
-    </div>
+          <!-- Search (Philippines only) -->
+          <form class="map-search" id="map-search-form" role="search" autocomplete="off">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m18 18-3.8-3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <input type="search" id="map-search-input" placeholder="Search places, streets, buildings" aria-label="Search the map">
+          </form>
+          <ul class="map-search-results" id="map-search-results" hidden></ul>
 
-      </div>
+          <!-- Context note: weather, evacuation info, route summary, errors -->
+          <p class="map-note" id="map-note" hidden role="status"></p>
+
+          <!-- GPS -->
+          <button class="map-round-btn map-locate-btn" id="btn-map-locate" type="button" aria-label="Show my location">
+            <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="5.2" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="10" r="1.9" fill="currentColor"/><path d="M10 0.8v3M10 16.2v3M0.8 10h3M16.2 10h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
+
+          <!-- Base map picker: Map / Satellite / Topography (works under any risk layer) -->
+          <div class="base-picker" id="base-picker">
+            <button class="base-picker-btn" id="btn-base-picker" type="button" aria-label="Map style" aria-expanded="false" aria-controls="base-picker-menu">
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m10 2 8 4.2-8 4.2L2 6.2 10 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="m2 10 8 4.2 8-4.2M2 13.8 10 18l8-4.2" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            </button>
+            <div class="base-picker-menu" id="base-picker-menu" hidden>
+              <p class="base-picker-title">Map style</p>
+              <div class="base-picker-row" role="radiogroup" aria-label="Map style">
+              <button type="button" role="radio" aria-checked="true" class="base-opt is-selected" data-base="street">
+                <svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M6 2 1.5 3.5v12L6 14l6 2 4.5-1.5v-12L12 4 6 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M6 2v12M12 4v12" stroke="currentColor" stroke-width="1.4"/></svg>
+                <span>Map</span>
+              </button>
+              <button type="button" role="radio" aria-checked="false" class="base-opt" data-base="satellite">
+                <img src="!assets/!buttons/defsatellite.png" alt=""><span>Satellite</span>
+              </button>
+              <button type="button" role="radio" aria-checked="false" class="base-opt" data-base="topo">
+                <img src="!assets/!buttons/deftopography.png" alt=""><span>Topography</span>
+              </button>
+              </div>
+              <p class="base-picker-title">Weather overlay</p>
+              <div class="ovl-row" role="radiogroup" aria-label="Weather overlay">
+                <button type="button" role="radio" aria-checked="true" class="ovl-opt is-selected" data-ovl="none">Off</button>
+                <button type="button" role="radio" aria-checked="false" class="ovl-opt" data-ovl="radar">Rain radar</button>
+                <button type="button" role="radio" aria-checked="false" class="ovl-opt" data-ovl="rain">Rain forecast</button>
+                <button type="button" role="radio" aria-checked="false" class="ovl-opt" data-ovl="wind">Wind</button>
+                <button type="button" role="radio" aria-checked="false" class="ovl-opt" data-ovl="clouds">Clouds</button>
+              </div>
+              <label class="evac-toggle"><input type="checkbox" id="evac-toggle" checked><span>Show evacuation centers on every layer</span></label>
+            </div>
+          </div>
+
+          <!-- Interactive FAB & Horizontal Menu (Stays fixed on screen) -->
+          <div class="map-fab-container" id="map-fab-container">
+            <div class="map-fab-menu" id="map-fab-menu">
+              <button class="fab-menu-item" type="button" data-layer="reports">
+                <svg class="fab-menu-svg" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M9 2 1.8 15h14.4L9 2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M9 7v3.6M9 12.6v.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                <span>Reports</span>
+              </button>
+              <button class="fab-menu-item" type="button" data-layer="landslide">
+                <img src="!assets/!buttons/deflandsliderisk.png" alt="">
+                <span>Landslide Risk</span>
+              </button>
+              <button class="fab-menu-item" type="button" data-layer="weather">
+                <img src="!assets/!buttons/defcloud.png" alt="">
+                <span>Weather</span>
+              </button>
+              <button class="fab-menu-item" type="button" data-layer="evacuation">
+                <img src="!assets/!buttons/defevac.png" alt="">
+                <span>Evacuation</span>
+              </button>
+              <button class="fab-menu-item" type="button" data-layer="flood">
+                <img src="!assets/!buttons/defflood.png" alt="">
+                <span>Flood</span>
+              </button>
+              <button class="fab-menu-item" type="button" data-layer="route">
+                <img src="!assets/!buttons/defroute.png" alt="">
+                <span>Route</span>
+              </button>
+            </div>
+            <button class="fab-map-toggle" id="btn-map-fab" type="button" aria-label="Toggle map options">
+              <img src="!assets/!buttons/floatactbutton.png" class="fab-icon-plus" alt="Open Menu">
+              <img src="!assets/!buttons/floatxactbutton.png" class="fab-icon-x" alt="Close Menu">
+            </button>
+          </div>
+
+        </div>
       </div>
 
       <!-- GUIDE TAB PANEL -->
@@ -586,8 +619,14 @@
 
           <!-- OFFLINE MAP DISPLAY AREA -->
           <div class="offline-map-wrapper">
-            <!-- Map Image fallback or Leaflet / Mapbox Canvas Container -->
-            <img src="!assets/!images/balangiga-offline-map.png" alt="Balangiga Offline Map" class="map-image-content">
+            <div class="live-map" id="offline-map" role="application" aria-label="Safe zones and resources map"></div>
+            <p class="map-note offline-note" id="offline-note" hidden role="status"></p>
+            <div class="offline-actions">
+              <button class="map-pill-btn" id="btn-offline-save" type="button">Save this area offline</button>
+              <button class="map-round-btn" id="btn-offline-locate" type="button" aria-label="Show my location">
+                <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="5.2" stroke="currentColor" stroke-width="1.7"/><circle cx="10" cy="10" r="1.9" fill="currentColor"/><path d="M10 0.8v3M10 16.2v3M0.8 10h3M16.2 10h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+              </button>
+            </div>
           </div>
 
         </div>
@@ -768,6 +807,10 @@
           <button class="type-card" type="button" data-type="Accident">
             <span class="type-icon-wrapper"><img src="!assets/!buttons/Accident.png" alt="Accident"></span>
             <span>Accident</span>
+          </button>
+          <button class="type-card" type="button" data-type="Landslide">
+            <span class="type-icon-wrapper"><img src="!assets/!buttons/Landslide.png" alt="Landslide"></span>
+            <span>Landslide</span>
           </button>
           <button class="type-card" type="button" data-type="Quake">
             <span class="type-icon-wrapper"><img src="!assets/!buttons/Quake.png" alt="Quake"></span>
@@ -997,7 +1040,8 @@
         </div>
 
         <div class="mini-map">
-          <img class="mini-map-img" src="!assets/!images/samar-map.png" alt="Map of Balangiga, Eastern Samar">
+          <div class="mini-map-canvas" id="sos-mini-map" aria-label="Map of your location"></div>
+          <span class="mini-map-pin" aria-hidden="true"></span>
           <span class="mini-map-you-here">You are here</span>
           <button class="track-location-pill" type="button" id="sos-track-location-btn">
             <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
@@ -1115,6 +1159,8 @@
             <span id="detail-loc-text">—</span>
           </div>
         </div>
+
+        <button type="button" class="detail-map-btn" id="detail-map-btn" hidden>View on map</button>
 
         <p class="section-title">Description</p>
         <p class="detail-desc" id="detail-desc"></p>
@@ -1270,12 +1316,13 @@
 
       <label class="sheet-search">
         <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m18 18-3.8-3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <input type="text" id="location-search-input" placeholder="Search Address">
+        <input type="search" id="location-search-input" placeholder="Search address or place, then press Enter" autocomplete="off">
       </label>
 
       <div class="mini-map">
-        <img class="mini-map-img" src="!assets/!images/samar-map.png" alt="Map of Balangiga, Eastern Samar">
-        <span class="mini-map-you-here">You are here</span>
+        <div class="mini-map-canvas" id="picker-mini-map" aria-label="Drag the map to choose a location"></div>
+        <span class="mini-map-pin" aria-hidden="true"></span>
+        <span class="mini-map-you-here" id="picker-label">Drag map to set location</span>
         <button class="track-location-pill" type="button" id="track-location-btn">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
           Track my location
@@ -1284,7 +1331,7 @@
 
       <div class="mini-map-address">
         <img src="!assets/!buttons/Pin.png" alt="">
-        <span>Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+        <span id="picker-address">Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
       </div>
 
       <div class="sheet-fields">
@@ -1299,7 +1346,9 @@
 
 </div>
 
+<script src="!js/leaflet.js"></script>
 <script src="!js/api.js"></script>
+<script src="!js/maps.js"></script>
 <script src="!js/app.js"></script>
 </body>
 </html>

@@ -18,6 +18,78 @@ const BayanihanAPI = (() => {
     typeof email === 'string' &&
     /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
 
+
+  /* ---------------------------------------------------------------
+     MAP DATA SOURCES (all free, no API key)
+       OpenStreetMap Overpass  -> responders, evacuation sites, waterways
+       OpenStreetMap Nominatim -> place search + reverse geocoding (PH only)
+       OSRM demo server        -> driving routes on real roads
+       Open-Meteo              -> current weather
+     These are community-run services with fair-use limits. For production,
+     self-host them or swap in a paid provider; only this file needs to change.
+  --------------------------------------------------------------- */
+  const OVERPASS_URLS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
+  const NOMINATIM = 'https://nominatim.openstreetmap.org';
+  const OSRM = 'https://router.project-osrm.org';
+  const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
+
+  async function fetchJSON(url, options = {}, timeoutMs = 15000) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: ctrl.signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function overpass(query) {
+    let lastErr;
+    for (const url of OVERPASS_URLS) {
+      try {
+        return await fetchJSON(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(query),
+        }, 25000);
+      } catch (err) { lastErr = err; }
+    }
+    throw lastErr;
+  }
+
+  const toRad = (d) => (d * Math.PI) / 180;
+  function distanceKm(a, b) {
+    const R = 6371;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  // Overpass returns nodes with lat/lon and ways/relations with a "center".
+  const elementLatLng = (el) =>
+    el.center ? { lat: el.center.lat, lng: el.center.lon }
+      : (el.lat != null ? { lat: el.lat, lng: el.lon } : null);
+
+  const RESPONDER_LABELS = {
+    hospital: 'Hospital', clinic: 'Clinic',
+    fire_station: 'Fire station', police: 'Police station',
+  };
+
+  const WMO_WEATHER = {
+    0: 'Clear sky', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast',
+    45: 'Fog', 48: 'Fog', 51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle',
+    61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 80: 'Rain showers',
+    81: 'Rain showers', 82: 'Violent showers', 95: 'Thunderstorm',
+    96: 'Thunderstorm with hail', 99: 'Thunderstorm with hail',
+  };
+
   return {
 
     /* ---------------------------------------------------------------
@@ -105,24 +177,419 @@ const BayanihanAPI = (() => {
       return { success: true };
     },
 
-    /* ---------------------------------------------------------------
-       CHANGE THIS INTO MAPS   INSTEAD OF NEARBY RESPONDERS
-    
-    NEARBY RESPONDERS
-       Real version: GET /api/responders/nearby?lat=&lng=
-       For now, returns fixed sample data regardless of coordinates.
-    --------------------------------------------------------------- */
-    async getNearbyResponders({ lat, lng } = {}) {
-      await delay(300);
-      return {
-        success: true,
-        responders: [
-          { name: 'Barangay Health Station', distanceKm: 0.4 },
-          { name: 'Volunteer Fire Brigade', distanceKm: 0.9 },
-          { name: 'Rescue Team — Bayanihan 12', distanceKm: 1.2 },
-        ],
-      };
+    getSavedLocation() {
+      return sessionUser && sessionUser.location ? { ...sessionUser.location } : null;
     },
+
+    /* ---------------------------------------------------------------
+       NEARBY RESPONDERS  (now backed by real map data)
+       Hospitals, clinics, fire stations and police stations around a point,
+       from OpenStreetMap, nearest first.
+       Real version: GET /api/responders/nearby?lat=&lng=
+    --------------------------------------------------------------- */
+    async getNearbyResponders({ lat, lng, radiusKm = 5, limit = 40 } = {}) {
+      if (lat == null || lng == null) return { success: false, error: 'Location needed.', responders: [] };
+      try {
+        const q = `[out:json][timeout:20];
+          nwr(around:${Math.round(radiusKm * 1000)},${lat},${lng})
+            [amenity~"^(hospital|clinic|fire_station|police)$"];
+          out center tags 120;`;
+        const data = await overpass(q);
+        const here = { lat, lng };
+        const responders = data.elements
+          .map((el) => {
+            const pos = elementLatLng(el);
+            if (!pos) return null;
+            const t = el.tags || {};
+            return {
+              id: el.type + '/' + el.id,
+              kind: t.amenity,
+              name: t.name || t['name:en'] || RESPONDER_LABELS[t.amenity] || 'Responder',
+              label: RESPONDER_LABELS[t.amenity] || 'Responder',
+              phone: t.phone || t['contact:phone'] || null,
+              ...pos,
+              distanceKm: Math.round(distanceKm(here, pos) * 10) / 10,
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.distanceKm - b.distanceKm)
+          .slice(0, limit);
+        return { success: true, responders };
+      } catch (err) {
+        return { success: false, error: 'Could not load nearby responders.', responders: [] };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       EVACUATION SITES inside a map view (bbox = {south, west, north, east})
+       Schools, gyms, barangay/town halls and official assembly points are the
+       usual evacuation centers in the Philippines. These come from OSM tags,
+       NOT an official LGU/NDRRMC list, so the UI tells people to confirm.
+       Each site carries a `kind`, an `outline` (footprint polygon when OSM has
+       one) and any capacity / phone / hours / address tags.
+       Real version: GET /api/evacuation-centers?bbox=
+    --------------------------------------------------------------- */
+    async getEvacuationCenters({ south, west, north, east }) {
+      try {
+        const box = `${south},${west},${north},${east}`;
+        const q = `[out:json][timeout:25];
+          (
+            nwr["emergency"~"^(assembly_point|evacuation_center)$"](${box});
+            nwr["amenity"="shelter"]["name"](${box});
+            nwr["amenity"="townhall"](${box});
+            nwr["amenity"="community_centre"](${box});
+            nwr["amenity"="school"]["name"](${box});
+            nwr["leisure"="sports_centre"]["name"](${box});
+            nwr["building"="gymnasium"]["name"](${box});
+          );
+          out geom tags 250;`;
+        const data = await overpass(q);
+        const seen = new Set();
+        const centers = [];
+        const KIND_LABEL = {
+          assembly: 'Assembly point', shelter: 'Shelter', hall: 'Hall / community center',
+          school: 'School', gym: 'Gym / sports center',
+        };
+        for (const el of data.elements) {
+          const t = el.tags || {};
+          let pos = null;
+          let outline = null;
+          if (el.type === 'node') pos = { lat: el.lat, lng: el.lon };
+          else if (el.type === 'way' && el.geometry && el.geometry.length > 3) {
+            const step = Math.ceil(el.geometry.length / 80);
+            outline = el.geometry.filter((_, i) => i % step === 0).map((p) => [p.lat, p.lon]);
+          }
+          if (!pos && el.bounds) {
+            pos = { lat: (el.bounds.minlat + el.bounds.maxlat) / 2, lng: (el.bounds.minlon + el.bounds.maxlon) / 2 };
+          }
+          if (!pos) pos = elementLatLng(el);
+          if (!pos) continue;
+
+          let kind = 'school';
+          if (t.emergency === 'assembly_point' || t.emergency === 'evacuation_center') kind = 'assembly';
+          else if (t.amenity === 'shelter') kind = 'shelter';
+          else if (t.amenity === 'townhall' || t.amenity === 'community_centre') kind = 'hall';
+          else if (t.leisure === 'sports_centre' || t.building === 'gymnasium') kind = 'gym';
+
+          const name = t.name || t['name:en'] || (kind === 'assembly' ? 'Assembly point' : KIND_LABEL[kind]);
+          const key = name + pos.lat.toFixed(4) + pos.lng.toFixed(4);
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          const address = [t['addr:housenumber'], t['addr:street'], t['addr:suburb'] || t['addr:village'], t['addr:city'] || t['addr:town']]
+            .filter(Boolean).join(', ');
+          centers.push({
+            id: el.type + '/' + el.id,
+            name, kind,
+            label: KIND_LABEL[kind],
+            official: kind === 'assembly' || /evacuation/i.test(name),
+            capacity: t.capacity || null,
+            phone: t.phone || t['contact:phone'] || null,
+            hours: t.opening_hours || null,
+            address: address || null,
+            outline,
+            ...pos,
+          });
+        }
+        return { success: true, centers };
+      } catch (err) {
+        return { success: false, error: 'Could not load evacuation sites.', centers: [] };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       WATERWAYS inside a map view — rivers, canals, creeks and drains.
+       Used by the Flood layer to highlight areas beside water.
+    --------------------------------------------------------------- */
+    async getWaterways({ south, west, north, east }) {
+      try {
+        const q = `[out:json][timeout:25];
+          way["waterway"~"^(river|stream|canal|drain)$"](${south},${west},${north},${east});
+          out geom tags 200;`;
+        const data = await overpass(q);
+        const ways = data.elements
+          .filter((el) => el.geometry && el.geometry.length > 1)
+          .map((el) => ({
+            id: el.id,
+            name: (el.tags && (el.tags.name || el.tags['name:en'])) || null,
+            kind: el.tags.waterway,
+            points: el.geometry.map((p) => [p.lat, p.lon]),
+          }));
+        return { success: true, ways };
+      } catch (err) {
+        return { success: false, error: 'Could not load waterways.', ways: [] };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       ROUTES along real roads (OSRM). profile: 'foot' (walking, the common
+       way people evacuate) or 'driving'. Returns up to 3 alternatives, each
+       with turn-by-turn steps. `from`/`to` are {lat, lng}.
+       Real version: your own routing service.
+    --------------------------------------------------------------- */
+    async getRoute({ from, to, profile = 'driving' }) {
+      const stepText = (s) => {
+        const m = s.maneuver || {};
+        const road = s.name ? ` on ${s.name}` : '';
+        const dir = m.modifier ? m.modifier.replace('slight ', 'slightly ') : '';
+        switch (m.type) {
+          case 'depart': return `Head ${dir || 'out'}${road}`;
+          case 'arrive': return 'Arrive at the evacuation site';
+          case 'roundabout': case 'rotary': return `Take the roundabout${s.name ? ' toward ' + s.name : ''}`;
+          case 'continue': case 'new name': return `Continue${road}`;
+          default: return dir ? `Turn ${dir}${s.name ? ' onto ' + s.name : ''}` : `Continue${road}`;
+        }
+      };
+      const base = profile === 'foot'
+        ? 'https://routing.openstreetmap.de/routed-foot/route/v1/driving'
+        : `${OSRM}/route/v1/driving`;
+      try {
+        const url = `${base}/${from.lng},${from.lat};${to.lng},${to.lat}` +
+          '?overview=full&geometries=geojson&steps=true&alternatives=true';
+        const data = await fetchJSON(url);
+        if (!data.routes || !data.routes.length) return { success: false, error: 'No route found.' };
+        const routes = data.routes.slice(0, 3).map((r) => ({
+          distanceKm: Math.round(r.distance / 100) / 10,
+          durationMin: Math.max(1, Math.round(r.duration / 60)),
+          points: r.geometry.coordinates.map(([lng, lat]) => [lat, lng]),
+          steps: (r.legs || []).flatMap((leg) => leg.steps || [])
+            .map((s) => ({ text: stepText(s), distM: Math.round(s.distance) })),
+        }));
+        return { success: true, profile, routes, ...routes[0] };
+      } catch (err) {
+        return { success: false, error: 'Could not calculate a route right now.' };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       PLACE SEARCH (Philippines only)
+       Real version: GET /api/places/search?q=
+    --------------------------------------------------------------- */
+    async searchPlaces(query) {
+      const q = (query || '').trim();
+      if (q.length < 2) return { success: false, error: 'Type at least 2 characters.', places: [] };
+      try {
+        const url = `${NOMINATIM}/search?format=jsonv2&countrycodes=ph&limit=6&addressdetails=0&q=${encodeURIComponent(q)}`;
+        const data = await fetchJSON(url, { headers: { 'Accept-Language': 'en' } });
+        const places = data.map((p) => ({
+          name: p.name || p.display_name.split(',')[0],
+          display: p.display_name,
+          lat: parseFloat(p.lat),
+          lng: parseFloat(p.lon),
+          bounds: p.boundingbox
+            ? [[parseFloat(p.boundingbox[0]), parseFloat(p.boundingbox[2])],
+               [parseFloat(p.boundingbox[1]), parseFloat(p.boundingbox[3])]]
+            : null,
+        }));
+        return { success: true, places };
+      } catch (err) {
+        return { success: false, error: 'Search is unavailable right now.', places: [] };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       REVERSE GEOCODE: coordinates -> readable address
+    --------------------------------------------------------------- */
+    async reverseGeocode({ lat, lng }) {
+      try {
+        const url = `${NOMINATIM}/reverse?format=jsonv2&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`;
+        const data = await fetchJSON(url, { headers: { 'Accept-Language': 'en' } });
+        if (!data || data.error) return { success: false, error: 'No address here.' };
+        const a = data.address || {};
+        const streetParts = [a.house_number, a.road || a.pedestrian || a.neighbourhood, a.suburb || a.quarter || a.village]
+          .filter(Boolean);
+        const cityParts = [a.city || a.town || a.municipality || a.county, a.state || a.region]
+          .filter(Boolean);
+        return {
+          success: true,
+          display: data.display_name,
+          street: streetParts.join(', '),
+          city: cityParts.join(', '),
+        };
+      } catch (err) {
+        return { success: false, error: 'Could not look up that address.' };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       CURRENT WEATHER at a point (Open-Meteo)
+    --------------------------------------------------------------- */
+    async getWeather({ lat, lng }) {
+      try {
+        const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}` +
+          '&current=temperature_2m,precipitation,weather_code,wind_speed_10m&timezone=auto';
+        const data = await fetchJSON(url);
+        const c = data.current;
+        return {
+          success: true,
+          tempC: Math.round(c.temperature_2m),
+          rainMm: c.precipitation,
+          windKmh: Math.round(c.wind_speed_10m),
+          summary: WMO_WEATHER[c.weather_code] || 'Weather update',
+        };
+      } catch (err) {
+        return { success: false, error: 'Weather is unavailable right now.' };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       RAIN RADAR frames (RainViewer public API) for the Weather layer.
+       `frames` are the recent past frames, oldest first, so the map can
+       animate them.
+    --------------------------------------------------------------- */
+    async getRadarTiles() {
+      try {
+        const data = await fetchJSON('https://api.rainviewer.com/public/weather-maps.json');
+        const past = (data.radar && data.radar.past) || [];
+        const frame = past[past.length - 1];
+        if (!frame) return { success: false, error: 'Radar is unavailable right now.' };
+        const tpl = (f) => `${data.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`;
+        const ir = (data.satellite && data.satellite.infrared) || [];
+        const cloud = ir[ir.length - 1];
+        return {
+          success: true,
+          urlTemplate: tpl(frame),
+          time: frame.time,
+          frames: past.map((f) => ({ time: f.time, url: tpl(f) })),
+          cloudUrl: cloud ? `${data.host}${cloud.path}/256/{z}/{x}/{y}/0/0_0.png` : null,
+          cloudTime: cloud ? cloud.time : null,
+        };
+      } catch (err) {
+        return { success: false, error: 'Radar is unavailable right now.' };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       WEATHER OUTLOOK at a point (Open-Meteo): now, next 24 h hour by hour,
+       a 4-day forecast, plus rain that already fell (past 3 days) and soil
+       moisture. From these it derives rough FLOOD and LANDSLIDE trigger
+       levels. These are estimates, NOT official PAGASA / MGB warnings.
+    --------------------------------------------------------------- */
+    async getWeatherOutlook({ lat, lng }) {
+      const LEVELS = ['Low', 'Moderate', 'High', 'Severe'];
+      const sum = (a, from, to) => {
+        let s = 0;
+        for (let i = Math.max(0, from); i < Math.min(a.length, to); i++) s += a[i] || 0;
+        return Math.round(s * 10) / 10;
+      };
+      try {
+        const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}` +
+          '&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m' +
+          '&hourly=precipitation,precipitation_probability,soil_moisture_0_to_7cm' +
+          '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max' +
+          '&past_days=3&forecast_days=4&timezone=auto&wind_speed_unit=kmh';
+        const d = await fetchJSON(url);
+        const c = d.current, h = d.hourly, dl = d.daily;
+        let i0 = h.time.indexOf(c.time.slice(0, 13) + ':00');
+        if (i0 < 0) i0 = 72;
+        const rain = h.precipitation || [];
+        const prob = h.precipitation_probability || [];
+        const past24 = sum(rain, i0 - 24, i0);
+        const past72 = sum(rain, i0 - 72, i0);
+        const next6 = sum(rain, i0, i0 + 6);
+        const next24 = sum(rain, i0, i0 + 24);
+        const maxRate = Math.max(0, ...rain.slice(i0, i0 + 6).map((v) => v || 0));
+        const maxProb = Math.max(0, ...prob.slice(i0, i0 + 24).map((v) => v || 0));
+        const soil = h.soil_moisture_0_to_7cm ? h.soil_moisture_0_to_7cm[i0] : null;
+
+        // hourly rain rate bands loosely follow PAGASA's rainfall advisory colors
+        const rateLabel = maxRate >= 30 ? 'Torrential' : maxRate >= 15 ? 'Intense' : maxRate >= 7.5 ? 'Heavy'
+          : maxRate >= 2.5 ? 'Moderate' : maxRate > 0.1 ? 'Light' : 'None';
+
+        let flood = past24 * 0.5 + next24 >= 100 ? 3 : past24 * 0.5 + next24 >= 50 ? 2 : past24 * 0.5 + next24 >= 25 ? 1 : 0;
+        if (maxRate >= 15) flood = Math.min(3, flood + 1);
+        const cum = past72 + next24;
+        let slide = cum >= 200 ? 3 : cum >= 120 ? 2 : cum >= 60 ? 1 : 0;
+        if (soil != null && soil > 0.42 && cum >= 60) slide = Math.min(3, slide + 1);
+
+        const iDay = Math.max(0, dl.time.indexOf(c.time.slice(0, 10)));
+        const days = [];
+        for (let k = iDay; k < Math.min(dl.time.length, iDay + 4); k++) {
+          days.push({
+            date: dl.time[k],
+            summary: WMO_WEATHER[dl.weather_code[k]] || 'Forecast',
+            hi: Math.round(dl.temperature_2m_max[k]),
+            lo: Math.round(dl.temperature_2m_min[k]),
+            rainMm: Math.round((dl.precipitation_sum[k] || 0) * 10) / 10,
+            prob: dl.precipitation_probability_max ? dl.precipitation_probability_max[k] : null,
+          });
+        }
+        return {
+          success: true,
+          tempC: Math.round(c.temperature_2m),
+          feelsC: Math.round(c.apparent_temperature),
+          humidity: c.relative_humidity_2m,
+          rainNowMm: c.precipitation,
+          windKmh: Math.round(c.wind_speed_10m),
+          gustKmh: Math.round(c.wind_gusts_10m),
+          summary: WMO_WEATHER[c.weather_code] || 'Weather update',
+          past24, past72, next6, next24, maxRate, maxProb, rateLabel, soil,
+          hourly: rain.slice(i0, i0 + 24).map((mm, k) => ({ mm: mm || 0, p: prob[i0 + k] || 0 })),
+          days,
+          flood: { level: flood, label: LEVELS[flood] },
+          landslide: { level: slide, label: LEVELS[slide] },
+        };
+      } catch (err) {
+        return { success: false, error: 'Weather is unavailable right now.' };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       WEATHER GRID over a map view (Open-Meteo, one request for n x n points):
+       rain expected in the next 6 h and current wind, for the Rain forecast
+       and Wind overlays. Real version: your own gridded forecast service.
+    --------------------------------------------------------------- */
+    async getWeatherGrid({ south, west, north, east }, n = 5) {
+      try {
+        const pts = [];
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < n; j++) {
+            pts.push({ lat: south + ((north - south) * (i + 0.5)) / n, lng: west + ((east - west) * (j + 0.5)) / n });
+          }
+        }
+        const r = (v) => v.toFixed(3);
+        const url = `${OPEN_METEO}?latitude=${pts.map((p) => r(p.lat)).join(',')}&longitude=${pts.map((p) => r(p.lng)).join(',')}` +
+          '&current=wind_speed_10m,wind_direction_10m,cloud_cover&hourly=precipitation&forecast_hours=6&wind_speed_unit=kmh&timezone=auto';
+        const d = await fetchJSON(url);
+        const arr = Array.isArray(d) ? d : [d];
+        const cells = arr.map((x, k) => ({
+          lat: pts[k].lat, lng: pts[k].lng,
+          rain6: Math.round(((x.hourly && x.hourly.precipitation) || []).reduce((a, b) => a + (b || 0), 0) * 10) / 10,
+          windKmh: Math.round(x.current.wind_speed_10m),
+          windDir: x.current.wind_direction_10m,
+          cloud: x.current.cloud_cover,
+        }));
+        return { success: true, cells, dLat: (north - south) / n, dLng: (east - west) / n };
+      } catch (err) {
+        return { success: false, error: 'Weather overlay is unavailable right now.' };
+      }
+    },
+
+    /* ---------------------------------------------------------------
+       RIVER FLOW outlook (Open-Meteo Flood API, GloFAS model, ~5 km grid).
+       Compares the 7-day peak discharge to the usual flow for that river.
+       Not every point sits on a modelled river, so this can come back empty.
+    --------------------------------------------------------------- */
+    async getRiverOutlook({ lat, lng }) {
+      try {
+        const url = `https://flood-api.open-meteo.com/v1/flood?latitude=${lat}&longitude=${lng}` +
+          '&daily=river_discharge,river_discharge_mean&forecast_days=7';
+        const d = await fetchJSON(url);
+        const q = (d.daily.river_discharge || []).filter((v) => v != null);
+        const m = (d.daily.river_discharge_mean || []).filter((v) => v != null);
+        if (!q.length || !m.length) return { success: false, error: 'No river data here.' };
+        const peak = Math.max(...q);
+        const usual = m.reduce((a, b) => a + b, 0) / m.length;
+        if (!(usual > 0.5)) return { success: false, error: 'No river data here.' };
+        const ratio = Math.round((peak / usual) * 10) / 10;
+        const level = ratio >= 4 ? 3 : ratio >= 2.5 ? 2 : ratio >= 1.5 ? 1 : 0;
+        return { success: true, ratio, peak: Math.round(peak), level, label: ['Normal', 'Above normal', 'High', 'Very high'][level] };
+      } catch (err) {
+        return { success: false, error: 'River data is unavailable.' };
+      }
+    },
+
+    distanceKm,
 
     /* ---------------------------------------------------------------
        REPORT INCIDENT

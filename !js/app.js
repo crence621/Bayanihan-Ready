@@ -1,6 +1,9 @@
 (() => {
   const screens = document.querySelectorAll('.screen');
 
+  // Real maps (Leaflet). null if Leaflet failed to load, so the rest of the app still works.
+  const BM = typeof BayanihanMaps !== 'undefined' ? BayanihanMaps : null;
+
   function showScreen(name) {
     screens.forEach((s) => s.classList.toggle('is-active', s.dataset.screen === name));
   }
@@ -111,6 +114,10 @@
         coordsReadout.hidden = false;
         coordsReadout.textContent = formatCoords(latitude, longitude);
         await BayanihanAPI.saveLocation({ lat: latitude, lng: longitude });
+        if (BM) {
+          BM.setUserPosition({ lat: latitude, lng: longitude, accuracy: pos.coords.accuracy });
+          BM.startTracking().catch(() => {}); // keep the blue dot live
+        }
 
         const homeCoords = document.getElementById('home-coords');
         homeCoords.hidden = false;
@@ -133,14 +140,6 @@
   async function enterHome() {
     const user = BayanihanAPI.getCurrentUser();
     if (user) applyUserToUI(user);
-
-    const { responders } = await BayanihanAPI.getNearbyResponders();
-    const list = document.getElementById('responder-list');
-    if (list) {
-      list.innerHTML = responders
-        .map((r) => `<li><span class="dot-status"></span> ${r.name} <em>${r.distanceKm} km</em></li>`)
-        .join('');
-    }
 
     showScreen('home');
     setTab('home');
@@ -171,6 +170,7 @@
   /* ------------------------- EMERGENCIES FEED ------------------------------ */
   const TYPE_TITLES = {
     Flood: 'Flooded Area',
+    Landslide: 'Landslide',
     Fire: 'Fire Emergency',
     Medical: 'Medical Emergency',
     Accident: 'Road Accident',
@@ -181,6 +181,12 @@
   };
 
   const TYPE_TIPS = {
+    Landslide: [
+      'Move away from the slope, the path of the slide and any rivers or creeks below it.',
+      'Do not cross a road covered by soil, rocks or water. More ground may give way.',
+      'Listen for rumbling, cracking trees or a sudden change in water color.',
+      'Go to higher, flat, stable ground or the nearest evacuation center.',
+    ],
     Flood: [
       'Move to higher ground and avoid walking or driving through floodwater.',
       'Stay away from downed power lines and submerged outlets.',
@@ -219,6 +225,7 @@
       type: 'Flood',
       title: 'Flooded Area',
       location: '6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar',
+      lat: 11.0967, lng: 125.3858, minsAgo: 42,
       desc: 'A severe flooding incident has been reported in this area. Rising water levels have affected nearby homes and roads, posing risks to residents and travelers. Emergency services are urgently needed to assist with evacuation, provide medical aid, and ensure public safety.',
       images: ['!assets/!images/flood-rescue-1.png', '!assets/!images/flood-rescue-2.png'],
       // No sample audio file ships with this seed post yet — leave empty
@@ -231,6 +238,7 @@
       type: 'Medical',
       title: 'Medical Emergency',
       location: 'Brgy. San Miguel, Basey City, Eastern Samar',
+      lat: 11.2822, lng: 125.0689, minsAgo: 130,
       desc: 'A critical medical situation has been reported in this area. A resident is experiencing severe health complications and requires immediate assistance.',
       images: [],
       audios: [],
@@ -239,6 +247,13 @@
   ];
 
   const myEmergencies = [];
+
+  // Community reports go onto the maps too (the Reports layer reads the same list).
+  if (BM) {
+    othersEmergencies.forEach((e) => {
+      if (e.lat != null) BM.addIncident({ id: e.id, type: e.type, title: e.title, desc: e.desc, lat: e.lat, lng: e.lng, source: 'community', time: Date.now() - (e.minsAgo || 0) * 60000 });
+    });
+  }
 
   let currentSegment = 'mine';
 
@@ -281,6 +296,7 @@
         const id = btn.dataset.deleteId;
         const idx = myEmergencies.findIndex((i) => i.id === id);
         if (idx > -1) myEmergencies.splice(idx, 1);
+        if (BM) BM.removeIncident(id);
         renderEmergencyFeed();
       });
     });
@@ -410,7 +426,23 @@
       : "If you're near this emergency:";
     document.getElementById('detail-tips-list').innerHTML = tips.map((t) => `<li>${t}</li>`).join('');
 
+    const mapBtn = document.getElementById('detail-map-btn');
+    if (mapBtn) {
+      mapBtn.hidden = item.lat == null || item.lng == null;
+      mapBtn.dataset.id = item.id;
+    }
+
     showScreen('emergency-detail');
+  }
+
+  const detailMapBtn = document.getElementById('detail-map-btn');
+  if (detailMapBtn) {
+    detailMapBtn.addEventListener('click', async () => {
+      if (detailAudioEl) detailAudioEl.pause();
+      await enterHome();
+      setTab('maps');
+      setTimeout(() => { if (mainMap) mainMap.focusReport(detailMapBtn.dataset.id); }, 150);
+    });
   }
 
   document.getElementById('detail-back-btn').addEventListener('click', async () => {
@@ -593,7 +625,7 @@
     notifList.innerHTML = notifications
       .map(
         (n, i) => `
-      <div class="notif-item"${n.emergencyId ? ` data-notif-index="${i}" role="button" tabindex="0" style="cursor:pointer;"` : ''}>
+      <div class="notif-item"${n.emergencyId || n.map ? ` data-notif-index="${i}" role="button" tabindex="0" style="cursor:pointer;"` : ''}>
         <span class="notif-icon">${n.icon === 'bell' ? BELL_SVG : `<img src="${n.icon}" alt="">`}</span>
         <div class="notif-text">
           <h4>${n.title}</h4>
@@ -605,13 +637,27 @@
   }
   renderNotifications();
 
+  async function openNotification(n) {
+    if (!n) return;
+    if (n.emergencyId) { openEmergencyDetail(n.emergencyId); return; }
+    if (n.map) {                         // live flood / landslide alert: show it on the map
+      await enterHome();
+      setTab('maps');
+      setTimeout(() => {
+        if (!mainMap) return;
+        mainMap.setMode(n.map.mode);
+        mainMap.focusPoint(n.map.lat, n.map.lng, 16);
+      }, 150);
+    }
+  }
+
   // Tapping a notification that's tied to a reported emergency jumps
   // straight to that emergency's detail screen.
   notifList.addEventListener('click', (e) => {
     const el = e.target.closest('[data-notif-index]');
     if (!el) return;
     const n = notifications[Number(el.dataset.notifIndex)];
-    if (n && n.emergencyId) openEmergencyDetail(n.emergencyId);
+    openNotification(n);
   });
   notifList.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -619,7 +665,7 @@
     if (!el) return;
     e.preventDefault();
     const n = notifications[Number(el.dataset.notifIndex)];
-    if (n && n.emergencyId) openEmergencyDetail(n.emergencyId);
+    openNotification(n);
   });
 
   document.getElementById('bell-btn').addEventListener('click', () => {
@@ -653,21 +699,54 @@
   });
 
   // --- Select Location bottom sheet ---
-  // Shared by both the Report Emergency screen and the Setup SOS screen —
-  // whichever "Change" button opens it decides which on-screen label gets
-  // updated when the person confirms a location.
+  // Shared by Report Emergency, Setup SOS and Community Post — whichever
+  // "Change" button opens it decides which on-screen label gets updated.
+  // The map is real: drag it, search a place, or tap "Track my location".
+  // The center pin is reverse-geocoded into the address fields.
   const locationSheetOverlay = document.getElementById('location-sheet-overlay');
   const reportLocText = document.getElementById('report-loc-text');
   const sosLocText = document.getElementById('sos-loc-text');
   const locHouseInput = document.getElementById('loc-house-input');
   const locStreetInput = document.getElementById('loc-street-input');
   const locCityInput = document.getElementById('loc-city-input');
+  const locSearchInput = document.getElementById('location-search-input');
+  const pickerAddress = document.getElementById('picker-address');
+  const pickerLabel = document.getElementById('picker-label');
 
   let locationSheetTarget = reportLocText;
+  let picker = null;        // created the first time the sheet opens
+  let pickedCoords = null;
+
+  async function fillAddressFrom(coords) {
+    pickedCoords = coords;
+    pickerLabel.textContent = 'Finding address\u2026';
+    const rev = await BayanihanAPI.reverseGeocode(coords);
+    if (pickedCoords !== coords) return; // the map moved again; ignore this answer
+    pickerLabel.textContent = 'Selected location';
+    if (!rev.success) return;
+    if (rev.street) locStreetInput.value = rev.street;
+    if (rev.city) locCityInput.value = rev.city;
+    pickerAddress.textContent = [rev.street, rev.city].filter(Boolean).join(', ') || rev.display;
+  }
+
+  function ensurePicker() {
+    if (!picker && BM) {
+      picker = BM.createMiniMap(document.getElementById('picker-mini-map'), { onSettle: fillAddressFrom });
+    }
+    return picker;
+  }
 
   function openLocationSheet(targetEl) {
     locationSheetTarget = targetEl || reportLocText;
     locationSheetOverlay.classList.add('is-open');
+    const p = ensurePicker();
+    if (p) {
+      // Start at the spot this field was last set to, otherwise at the person's GPS fix.
+      const lat = parseFloat(locationSheetTarget.dataset.lat);
+      const lng = parseFloat(locationSheetTarget.dataset.lng);
+      if (!isNaN(lat) && !isNaN(lng)) p.setView([lat, lng], 17);
+      p.map.invalidateSize();
+    }
   }
   function closeLocationSheet() { locationSheetOverlay.classList.remove('is-open'); }
 
@@ -680,19 +759,69 @@
 
   document.getElementById('confirm-location-btn').addEventListener('click', () => {
     const parts = [locHouseInput.value.trim(), locStreetInput.value.trim(), locCityInput.value.trim()].filter(Boolean);
-    if (parts.length && locationSheetTarget) locationSheetTarget.textContent = parts.join(', ');
+    if (parts.length && locationSheetTarget) {
+      locationSheetTarget.textContent = parts.join(', ');
+      const c = picker ? picker.center() : pickedCoords;
+      if (c) {
+        locationSheetTarget.dataset.lat = c.lat;
+        locationSheetTarget.dataset.lng = c.lng;
+        locationSheetTarget.dataset.manual = '1'; // chosen by hand; GPS must not overwrite it
+      }
+    }
     closeLocationSheet();
   });
 
-  function trackLocationCosmetic() {
-    if (!('geolocation' in navigator)) return;
-    // Cosmetic in this prototype — a real build would re-center the map
-    // and reverse-geocode the coordinates into the address fields.
-    navigator.geolocation.getCurrentPosition(() => {}, () => {});
+  // Search a Philippine address/place from the sheet (Enter key).
+  locSearchInput.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = locSearchInput.value.trim();
+    if (q.length < 2 || !picker) return;
+    pickerLabel.textContent = 'Searching\u2026';
+    const res = await BayanihanAPI.searchPlaces(q);
+    if (!res.success || !res.places.length) {
+      pickerLabel.textContent = res.success ? 'No match found' : 'Search unavailable';
+      return;
+    }
+    picker.setView([res.places[0].lat, res.places[0].lng], 17);
+  });
+
+  // "Track my location" — recenter on the live GPS fix.
+  async function trackInto(mini, labelEl) {
+    if (!mini) return;
+    try {
+      await mini.flyToUser();
+      if (labelEl) labelEl.textContent = 'You are here';
+    } catch (err) {
+      if (labelEl) labelEl.textContent = 'Location unavailable';
+    }
   }
-  document.getElementById('track-location-btn').addEventListener('click', trackLocationCosmetic);
+  document.getElementById('track-location-btn').addEventListener('click', () => trackInto(ensurePicker(), pickerLabel));
+
+  // Setup SOS mini map: shows where you are, no dragging.
+  const sosMini = BM ? BM.createMiniMap(document.getElementById('sos-mini-map'), { interactive: false }) : null;
   const sosTrackBtn = document.getElementById('sos-track-location-btn');
-  if (sosTrackBtn) sosTrackBtn.addEventListener('click', trackLocationCosmetic);
+  if (sosTrackBtn) {
+    sosTrackBtn.addEventListener('click', () =>
+      trackInto(sosMini, document.querySelector('[data-screen="setup-sos"] .mini-map-you-here')));
+  }
+
+  // First GPS fix: show live coordinates and swap the placeholder address for the real one.
+  if (BM) {
+    const homeCoords = document.getElementById('home-coords');
+    BM.onUser(async (u, first) => {
+      homeCoords.hidden = false;
+      homeCoords.textContent = formatCoords(u.lat, u.lng);
+      if (!first) return;
+      const rev = await BayanihanAPI.reverseGeocode(u);
+      if (!rev.success) return;
+      const text = [rev.street, rev.city].filter(Boolean).join(', ') || rev.display;
+      [reportLocText, sosLocText].forEach((el) => {
+        if (el && !el.dataset.manual) { el.textContent = text; el.dataset.lat = u.lat; el.dataset.lng = u.lng; }
+      });
+      pickerAddress.textContent = text;
+    });
+  }
 
   // --- Attach proof: photo / video / audio ---
   const proofPreviewContainer = document.getElementById('proof-preview-container');
@@ -1002,7 +1131,14 @@
     submitBtn.disabled = true;
 
     let coords = { lat: null, lng: null };
-    if ('geolocation' in navigator) {
+    const liveUser = BM && BM.getUser();
+    const chosenLat = parseFloat(reportLocText.dataset.lat);
+    const chosenLng = parseFloat(reportLocText.dataset.lng);
+    if (reportLocText.dataset.manual === '1' && !isNaN(chosenLat) && !isNaN(chosenLng)) {
+      coords = { lat: chosenLat, lng: chosenLng };   // location picked on the map
+    } else if (liveUser) {
+      coords = { lat: liveUser.lat, lng: liveUser.lng }; // live GPS
+    } else if ('geolocation' in navigator) {
       try {
         const pos = await new Promise((res, rej) =>
           navigator.geolocation.getCurrentPosition(res, rej, { timeout: 6000 })
@@ -1018,6 +1154,10 @@
     const selectedType = document.querySelector('.type-card.is-selected');
     const type = (selectedType && selectedType.dataset.type) || 'Other';
     const audios = proofItems.filter((p) => p.type === 'audio' && p.src).map((p) => p.src);
+    if (BM) {
+      BM.addIncident({ id: incident.id, type, title: TYPE_TITLES[type] || 'Emergency Reported', desc: notes,
+        lat: incident.lat, lng: incident.lng, source: 'mine', time: Date.now() });
+    }
 
     myEmergencies.unshift({
       id: incident.id,
@@ -1025,6 +1165,7 @@
       title: TYPE_TITLES[type] || 'Emergency Reported',
       location: reportLocText.textContent,
       desc: notes || 'No additional details were provided for this report.',
+      lat: incident.lat, lng: incident.lng,
       images: proofItems.filter((p) => p.type === 'photo').map((p) => p.src),
       videos: proofItems.filter((p) => p.type === 'video').map((p) => p.src),
       audios,
@@ -1124,40 +1265,96 @@
     });
   });
 
-  /* --------------------------------- MAPS TAB INTERACTION --------------------------------- */
-  /* --------------------------------- MAPS TAB LAYER SWITCHER --------------------------------- */
+  /* ----------------------------------- MAPS ----------------------------------- */
   const mapFabBtn = document.getElementById('btn-map-fab');
   const mapFabContainer = document.getElementById('map-fab-container');
   const menuItems = document.querySelectorAll('.fab-menu-item');
-  const mapBgLayer = document.getElementById('map-bg-layer');
-  const mapPin = document.getElementById('map-pin');
-  const mapPinLabel = document.getElementById('map-pin-label');
+  const baseOpts = document.querySelectorAll('.base-opt');
+  const ovlOpts = document.querySelectorAll('.ovl-opt');
+  const basePicker = document.getElementById('base-picker');
+  const baseMenu = document.getElementById('base-picker-menu');
+  const baseBtn = document.getElementById('btn-base-picker');
+  let mainMap = null;
+
+  if (BM) {
+    // Faint live map behind the SOS button on Home.
+    const homeBg = document.getElementById('home-bg-map');
+    if (homeBg) BM.createBackdrop(homeBg);
+
+    // Maps tab: street map by default; the menu switches layers.
+    mainMap = BM.createFullMap(document.getElementById('live-map'), {
+      mode: 'none',
+      base: 'street',
+      noteEl: document.getElementById('map-note'),
+      searchForm: document.getElementById('map-search-form'),
+      searchInput: document.getElementById('map-search-input'),
+      searchResults: document.getElementById('map-search-results'),
+      locateBtn: document.getElementById('btn-map-locate'),
+      onModeChange: (mode) =>
+        menuItems.forEach((mi) => mi.classList.toggle('is-selected', mi.dataset.layer === mode)),
+      onOpenReport: (id) => openEmergencyDetail(id),
+      onAlert: (a) => {
+        notifications.unshift({ icon: a.icon, title: a.title, body: a.body, map: { mode: a.mode, lat: a.lat, lng: a.lng } });
+        renderNotifications();
+        if (bellDot) bellDot.style.display = 'block';
+      },
+      onOverlayChange: (ov) => ovlOpts.forEach((b) => {
+        const on = b.dataset.ovl === ov;
+        b.classList.toggle('is-selected', on);
+        b.setAttribute('aria-checked', String(on));
+      }),
+      onBaseChange: (base) => baseOpts.forEach((b) => {
+        const on = b.dataset.base === base;
+        b.classList.toggle('is-selected', on);
+        b.setAttribute('aria-checked', String(on));
+      }),
+    });
+
+    // Guide > Offline Map: safe zones + responders, with tiles cached for no-signal use.
+    BM.createFullMap(document.getElementById('offline-map'), {
+      mode: 'evacuation',
+      noteEl: document.getElementById('offline-note'),
+      locateBtn: document.getElementById('btn-offline-locate'),
+      saveBtn: document.getElementById('btn-offline-save'),
+    });
+  } else {
+    const liveMap = document.getElementById('live-map');
+    if (liveMap) liveMap.innerHTML = '<p style="padding:90px 24px;text-align:center;font-size:13px;color:#8A8D93">The map couldn\u2019t load. Check that !js/leaflet.js is present.</p>';
+  }
 
   if (mapFabBtn && mapFabContainer) {
     mapFabBtn.addEventListener('click', () => {
-    mapFabContainer.classList.toggle('is-active');
+      mapFabContainer.classList.toggle('is-active');
     });
-    }
+  }
 
-    menuItems.forEach((item) => {
-  item.addEventListener('click', () => {
-    menuItems.forEach((mi) => mi.classList.remove('is-selected'));
-    item.classList.add('is-selected');
-
-    const newImageSrc = item.getAttribute('data-img');
-    if (newImageSrc && mapBgLayer) {
-      mapBgLayer.src = newImageSrc;
-    }
-
-    const targetTop = item.getAttribute('data-top');
-    const targetLeft = item.getAttribute('data-left');
-
-    if (mapPin) {
-      if (targetTop) mapPin.style.top = targetTop;
-      if (targetLeft) mapPin.style.left = targetLeft;
-    }
+  // Risk layers: tap one to show it, tap it again to switch it off.
+  menuItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      if (!mainMap) return;
+      const same = mainMap.getMode() === item.dataset.layer;
+      mainMap.setMode(same ? 'none' : item.dataset.layer);
     });
   });
+
+  // Base map style: independent of the risk layer.
+  const closeBase = () => { if (baseMenu) { baseMenu.hidden = true; baseBtn.setAttribute('aria-expanded', 'false'); } };
+  if (baseBtn && baseMenu) {
+    baseBtn.addEventListener('click', () => {
+      baseMenu.hidden = !baseMenu.hidden;
+      baseBtn.setAttribute('aria-expanded', String(!baseMenu.hidden));
+    });
+    baseOpts.forEach((b) => b.addEventListener('click', () => {
+      if (mainMap) mainMap.setBase(b.dataset.base);
+      closeBase();
+    }));
+    const evacToggle = document.getElementById('evac-toggle');
+    if (evacToggle) evacToggle.addEventListener('change', () => { if (mainMap) mainMap.setShowEvac(evacToggle.checked); });
+    ovlOpts.forEach((b) => b.addEventListener('click', () => {
+      if (mainMap) mainMap.setOverlay(b.dataset.ovl);
+    }));
+    document.addEventListener('click', (e) => { if (basePicker && !basePicker.contains(e.target)) closeBase(); });
+  }
 
   // --- Scrollable Menu Wheel & Drag Support ---
   const fabMenu = document.getElementById('map-fab-menu');
@@ -1177,10 +1374,10 @@
       startX = e.pageX - fabMenu.offsetLeft;
       scrollLeft = fabMenu.scrollLeft;
     });
-    
+
     fabMenu.addEventListener('mouseleave', () => { isDown = false; });
     fabMenu.addEventListener('mouseup', () => { isDown = false; });
-    
+
     fabMenu.addEventListener('mousemove', (e) => {
       if (!isDown) return;
       e.preventDefault();
@@ -1188,63 +1385,6 @@
       const walk = (x - startX) * 2;
       fabMenu.scrollLeft = scrollLeft - walk;
     });
-  }
-  
-  /* --------------------------------- MAP PAN & ZOOM INTERACTION --------------------------------- */
-  const mapViewport = document.getElementById('map-viewport');
-  const mapTransformContainer = document.getElementById('map-transform-container');
-
-  let scale = 1;
-  let pointX = 0;
-  let pointY = 0;
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-
-  function updateMapTransform() {
-    if (mapTransformContainer) {
-      mapTransformContainer.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
-    }
-  }
-
-  if (mapViewport && mapTransformContainer) {
-    mapViewport.addEventListener('mousedown', (e) => {
-      if (e.target.closest('.map-fab-container')) return;
-      isDragging = true;
-      startX = e.clientX - pointX;
-      startY = e.clientY - pointY;
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      e.preventDefault();
-      pointX = e.clientX - startX;
-      pointY = e.clientY - startY;
-      updateMapTransform();
-    });
-
-    window.addEventListener('mouseup', () => {
-      isDragging = false;
-    });
-
-    mapViewport.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const zoomIntensity = 0.1;
-      if (e.deltaY < 0) {
-        scale *= (1 + zoomIntensity);
-      } else {
-        scale /= (1 + zoomIntensity);
-      }
-
-      scale = Math.max(1, Math.min(scale, 4));
-
-      if (scale === 1) {
-        pointX = 0;
-        pointY = 0;
-      }
-
-      updateMapTransform();
-    }, { passive: false });
   }
 
   /* ------------------------------- OPENING -------------------------------- */
