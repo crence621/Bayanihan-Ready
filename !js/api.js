@@ -31,6 +31,8 @@ const BayanihanAPI = (() => {
   const OVERPASS_URLS = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+    'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   ];
   const NOMINATIM = 'https://nominatim.openstreetmap.org';
   const OSRM = 'https://router.project-osrm.org';
@@ -232,24 +234,48 @@ const BayanihanAPI = (() => {
     async getEvacuationCenters({ south, west, north, east }) {
       try {
         const box = `${south},${west},${north},${east}`;
-        const q = `[out:json][timeout:25];
+        // Two light queries run in parallel (one heavy query often times out on the public servers).
+        const NAMEHEALTH = 'health (center|centre|station)|rural health|RHU|BHS|barangay health';
+        const qCore = `[out:json][timeout:30];
           (
             nwr["emergency"~"^(assembly_point|evacuation_center)$"](${box});
+            nwr["evacuation_center"="yes"](${box});
             nwr["amenity"="shelter"]["name"](${box});
             nwr["amenity"="townhall"](${box});
             nwr["amenity"="community_centre"](${box});
             nwr["amenity"="school"]["name"](${box});
+          );
+          out geom tags 300;`;
+        const qMore = `[out:json][timeout:30];
+          (
+            nwr["amenity"~"^(clinic|doctors|health_post|social_facility)$"]["name"~"${NAMEHEALTH}|evacuation|barangay",i](${box});
+            nwr["healthcare"]["name"~"${NAMEHEALTH}",i](${box});
+            nwr["office"="government"]["name"~"barangay|brgy",i](${box});
             nwr["leisure"="sports_centre"]["name"](${box});
             nwr["building"="gymnasium"]["name"](${box});
           );
-          out geom tags 250;`;
-        const data = await overpass(q);
+          out geom tags 200;`;
+        const settled = await Promise.allSettled([overpass(qCore), overpass(qMore)]);
+        const ok = settled.filter((r) => r.status === 'fulfilled');
+        if (!ok.length) throw settled[0].reason;
+        const data = { elements: ok.flatMap((r) => r.value.elements || []) };
         const seen = new Set();
         const centers = [];
         const KIND_LABEL = {
           assembly: 'Assembly point', shelter: 'Shelter', hall: 'Hall / community center',
-          school: 'School', gym: 'Gym / sports center',
+          school: 'Public school', gym: 'Gym / sports center', health: 'Health center',
         };
+        // Only PUBLIC schools are candidates (DepEd-style names, or tagged public); private ones are skipped.
+        const PRIVATE = /private|academy|christian|catholic|baptist|montessori|college|university|international|seminary|learning center|institute/i;
+        const PUBLIC_NAME = /elementary|national high|integrated school|central school|high school|\bnhs\b|\bes\b|public|memorial school|science high/i;
+        const isPublicSchool = (t, name) => {
+          const op = (t['operator:type'] || t.operator_type || '').toLowerCase();
+          if (op === 'private' || op === 'religious') return false;
+          if (op === 'public' || op === 'government') return true;
+          return !PRIVATE.test(name + ' ' + (t.operator || ''));   // unknown ownership: keep unless the name says private
+        };
+        const HEALTH = /health (center|centre|station)|rural health|\brhu\b|\bbhs\b|barangay health/i;
+        const BRGY_HALL = /(barangay|brgy\.?) ?(hall|multi|covered|center|centre)|barangay hall/i;
         for (const el of data.elements) {
           const t = el.tags || {};
           let pos = null;
@@ -265,13 +291,17 @@ const BayanihanAPI = (() => {
           if (!pos) pos = elementLatLng(el);
           if (!pos) continue;
 
+          const rawName = t.name || t['name:en'] || '';
           let kind = 'school';
-          if (t.emergency === 'assembly_point' || t.emergency === 'evacuation_center') kind = 'assembly';
+          if (t.emergency === 'assembly_point' || t.emergency === 'evacuation_center' || t.evacuation_center === 'yes' || /evacuation (center|centre)/i.test(rawName)) kind = 'assembly';
           else if (t.amenity === 'shelter') kind = 'shelter';
-          else if (t.amenity === 'townhall' || t.amenity === 'community_centre') kind = 'hall';
+          else if (t.amenity === 'townhall' || t.amenity === 'community_centre' || t.office === 'government' || BRGY_HALL.test(rawName)) kind = 'hall';
+          else if (HEALTH.test(rawName) && t.amenity !== 'school') kind = 'health';
           else if (t.leisure === 'sports_centre' || t.building === 'gymnasium') kind = 'gym';
+          if (kind === 'school' && !isPublicSchool(t, rawName)) continue;
+          if (kind === 'health' && t.amenity === 'hospital') continue;
 
-          const name = t.name || t['name:en'] || (kind === 'assembly' ? 'Assembly point' : KIND_LABEL[kind]);
+          const name = rawName || (kind === 'assembly' ? 'Evacuation center' : KIND_LABEL[kind]);
           const key = name + pos.lat.toFixed(4) + pos.lng.toFixed(4);
           if (seen.has(key)) continue;
           seen.add(key);
@@ -281,7 +311,7 @@ const BayanihanAPI = (() => {
           centers.push({
             id: el.type + '/' + el.id,
             name, kind,
-            label: KIND_LABEL[kind],
+            label: kind === 'hall' && BRGY_HALL.test(name) ? 'Barangay hall' : (kind === 'assembly' && (t.emergency === 'evacuation_center' || t.evacuation_center === 'yes' || /evacuation (center|centre)/i.test(name))) ? 'Evacuation center' : KIND_LABEL[kind],
             official: kind === 'assembly' || /evacuation/i.test(name),
             capacity: t.capacity || null,
             phone: t.phone || t['contact:phone'] || null,
@@ -334,7 +364,7 @@ const BayanihanAPI = (() => {
         const dir = m.modifier ? m.modifier.replace('slight ', 'slightly ') : '';
         switch (m.type) {
           case 'depart': return `Head ${dir || 'out'}${road}`;
-          case 'arrive': return 'Arrive at the evacuation site';
+          case 'arrive': return 'Arrive at your destination';
           case 'roundabout': case 'rotary': return `Take the roundabout${s.name ? ' toward ' + s.name : ''}`;
           case 'continue': case 'new name': return `Continue${road}`;
           default: return dir ? `Turn ${dir}${s.name ? ' onto ' + s.name : ''}` : `Continue${road}`;

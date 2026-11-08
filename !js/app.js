@@ -699,10 +699,10 @@
   });
 
   // --- Select Location bottom sheet ---
-  // Shared by Report Emergency, Setup SOS and Community Post — whichever
-  // "Change" button opens it decides which on-screen label gets updated.
-  // The map is real: drag it, search a place, or tap "Track my location".
-  // The center pin is reverse-geocoded into the address fields.
+  // Shared by Report Emergency and Setup SOS. Whichever "Change" button (or preview map)
+  // opens it decides which on-screen location gets updated. The map is real: drag it,
+  // search a place and pick a result, or tap "Use my location". The center pin is
+  // reverse-geocoded into the address fields.
   const locationSheetOverlay = document.getElementById('location-sheet-overlay');
   const reportLocText = document.getElementById('report-loc-text');
   const sosLocText = document.getElementById('sos-loc-text');
@@ -710,101 +710,178 @@
   const locStreetInput = document.getElementById('loc-street-input');
   const locCityInput = document.getElementById('loc-city-input');
   const locSearchInput = document.getElementById('location-search-input');
+  const locSearchForm = document.getElementById('location-search-form');
+  const locResults = document.getElementById('location-search-results');
   const pickerAddress = document.getElementById('picker-address');
   const pickerLabel = document.getElementById('picker-label');
+  const confirmLocBtn = document.getElementById('confirm-location-btn');
 
   let locationSheetTarget = reportLocText;
   let picker = null;        // created the first time the sheet opens
   let pickedCoords = null;
+  let pickedFrom = null;    // what the pin was last set by, so we don't lose a search result's name
+  let addrToken = 0;
 
-  async function fillAddressFrom(coords) {
+  const addrText = (rev) => [rev.street, rev.city].filter(Boolean).join(', ') || rev.display || '';
+
+  async function fillAddressFrom(coords, keepName) {
     pickedCoords = coords;
-    pickerLabel.textContent = 'Finding address\u2026';
+    const tok = ++addrToken;
+    confirmLocBtn.disabled = true;
+    pickerLabel.textContent = 'Finding address…';
+    pickerAddress.textContent = 'Finding address…';
     const rev = await BayanihanAPI.reverseGeocode(coords);
-    if (pickedCoords !== coords) return; // the map moved again; ignore this answer
+    if (tok !== addrToken) return; // the map moved again; ignore this answer
+    confirmLocBtn.disabled = false;
     pickerLabel.textContent = 'Selected location';
-    if (!rev.success) return;
-    if (rev.street) locStreetInput.value = rev.street;
-    if (rev.city) locCityInput.value = rev.city;
-    pickerAddress.textContent = [rev.street, rev.city].filter(Boolean).join(', ') || rev.display;
+    if (!rev.success) { pickerAddress.textContent = 'No address found here. You can type one below.'; return; }
+    locStreetInput.value = rev.street || (keepName || '');
+    locCityInput.value = rev.city || '';
+    pickerAddress.textContent = addrText(rev) || keepName || 'Pinned location';
   }
 
   function ensurePicker() {
     if (!picker && BM) {
-      picker = BM.createMiniMap(document.getElementById('picker-mini-map'), { onSettle: fillAddressFrom });
+      picker = BM.createMiniMap(document.getElementById('picker-mini-map'), { onSettle: (c) => fillAddressFrom(c) });
     }
     return picker;
+  }
+
+  function showResults(items, message) {
+    locResults.innerHTML = '';
+    if (!items && !message) { locResults.hidden = true; return; }
+    if (message) { const li = document.createElement('li'); li.className = 'is-empty'; li.textContent = message; locResults.appendChild(li); }
+    (items || []).forEach((p) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      const t = document.createElement('strong'); t.textContent = p.name;
+      const sub = document.createElement('span'); sub.textContent = p.display.split(',').slice(1, 4).join(',').trim();
+      b.append(t, sub);
+      b.addEventListener('click', () => {
+        showResults(null);
+        locSearchInput.value = p.name;
+        if (picker) {
+          picker.setView([p.lat, p.lng], 17);
+          picker.map.invalidateSize();
+          fillAddressFrom({ lat: p.lat, lng: p.lng }, p.name);   // the map's own "settle" event fills it too
+        }
+      });
+      li.appendChild(b);
+      locResults.appendChild(li);
+    });
+    locResults.hidden = false;
   }
 
   function openLocationSheet(targetEl) {
     locationSheetTarget = targetEl || reportLocText;
     locationSheetOverlay.classList.add('is-open');
+    locSearchInput.value = '';
+    showResults(null);
+    locHouseInput.value = '';
     const p = ensurePicker();
-    if (p) {
-      // Start at the spot this field was last set to, otherwise at the person's GPS fix.
-      const lat = parseFloat(locationSheetTarget.dataset.lat);
-      const lng = parseFloat(locationSheetTarget.dataset.lng);
-      if (!isNaN(lat) && !isNaN(lng)) p.setView([lat, lng], 17);
+    if (!p) return;
+    // Start at the spot this field was last set to, otherwise at the person's position.
+    const lat = parseFloat(locationSheetTarget.dataset.lat);
+    const lng = parseFloat(locationSheetTarget.dataset.lng);
+    const u = BM.getUser();
+    const start = !isNaN(lat) && !isNaN(lng) ? { lat, lng } : u ? { lat: u.lat, lng: u.lng } : null;
+    // The sheet was hidden, so Leaflet has no size yet: measure, then center.
+    requestAnimationFrame(() => {
       p.map.invalidateSize();
-    }
+      if (start) { p.setView([start.lat, start.lng], 17); fillAddressFrom(start); }
+      else pickerLabel.textContent = 'Drag the map or search a place';
+    });
   }
   function closeLocationSheet() { locationSheetOverlay.classList.remove('is-open'); }
 
+  // Put a place into one of the two screens (text + preview map).
+  const locTargets = new Map();   // text element -> { mini, label }
+  function setLocation(el, { lat, lng, text, manual }) {
+    el.textContent = text;
+    el.dataset.lat = lat; el.dataset.lng = lng;
+    if (manual) el.dataset.manual = '1'; else delete el.dataset.manual;
+    const t = locTargets.get(el);
+    if (t) {
+      if (t.mini) { t.mini.setView([lat, lng], 17); t.mini.map.invalidateSize(); }
+      if (t.label) t.label.textContent = manual ? 'Selected location' : 'You are here';
+    }
+  }
+
+  // "Use my location": real GPS, not a hand-set spot.
+  async function useMyLocation(el, labelEl, btn) {
+    const old = labelEl && labelEl.textContent;
+    if (labelEl) labelEl.textContent = 'Finding you…';
+    if (btn) btn.disabled = true;
+    try {
+      const g = await BM.currentGps();
+      const rev = await BayanihanAPI.reverseGeocode(g);
+      setLocation(el, { lat: g.lat, lng: g.lng, text: rev.success ? addrText(rev) : formatCoords(g.lat, g.lng), manual: false });
+      if (labelEl) labelEl.textContent = 'You are here';
+    } catch (err) {
+      if (labelEl) labelEl.textContent = old || 'Location unavailable';
+      alert(BM.geoErrorText(err) + '\nYou can still tap Change and pick a place on the map.');
+    } finally { if (btn) btn.disabled = false; }
+  }
+
   document.getElementById('btn-change-location').addEventListener('click', () => openLocationSheet(reportLocText));
   const sosChangeLocationBtn = document.getElementById('btn-sos-change-location');
-  if (sosChangeLocationBtn) {
-    sosChangeLocationBtn.addEventListener('click', () => openLocationSheet(sosLocText));
-  }
+  if (sosChangeLocationBtn) sosChangeLocationBtn.addEventListener('click', () => openLocationSheet(sosLocText));
   document.getElementById('location-sheet-back').addEventListener('click', closeLocationSheet);
+  // tapping the preview maps opens the picker too
+  [['report-mini-tap', reportLocText], ['sos-mini-tap', sosLocText]].forEach(([id, el]) => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', () => openLocationSheet(el));
+  });
 
-  document.getElementById('confirm-location-btn').addEventListener('click', () => {
+  confirmLocBtn.addEventListener('click', () => {
     const parts = [locHouseInput.value.trim(), locStreetInput.value.trim(), locCityInput.value.trim()].filter(Boolean);
-    if (parts.length && locationSheetTarget) {
-      locationSheetTarget.textContent = parts.join(', ');
-      const c = picker ? picker.center() : pickedCoords;
-      if (c) {
-        locationSheetTarget.dataset.lat = c.lat;
-        locationSheetTarget.dataset.lng = c.lng;
-        locationSheetTarget.dataset.manual = '1'; // chosen by hand; GPS must not overwrite it
-      }
+    const c = picker ? picker.center() : pickedCoords;
+    if (c && locationSheetTarget) {
+      setLocation(locationSheetTarget, { lat: c.lat, lng: c.lng, text: parts.join(', ') || pickerAddress.textContent || formatCoords(c.lat, c.lng), manual: true });
     }
     closeLocationSheet();
   });
 
-  // Search a Philippine address/place from the sheet (Enter key).
-  locSearchInput.addEventListener('keydown', async (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
+  // Search a Philippine place or address (button, Enter key, or after a short pause in typing).
+  async function runLocationSearch() {
     const q = locSearchInput.value.trim();
-    if (q.length < 2 || !picker) return;
-    pickerLabel.textContent = 'Searching\u2026';
+    if (q.length < 2) { showResults(null); return; }
+    showResults([], 'Searching…');
     const res = await BayanihanAPI.searchPlaces(q);
-    if (!res.success || !res.places.length) {
-      pickerLabel.textContent = res.success ? 'No match found' : 'Search unavailable';
-      return;
-    }
-    picker.setView([res.places[0].lat, res.places[0].lng], 17);
+    if (locSearchInput.value.trim() !== q) return;
+    if (!res.success) showResults([], res.error || 'Search is unavailable right now.');
+    else if (!res.places.length) showResults([], 'No match in the Philippines. Try a street, barangay or landmark.');
+    else showResults(res.places);
+  }
+  locSearchForm.addEventListener('submit', (e) => { e.preventDefault(); runLocationSearch(); });
+  let searchTimer = null;
+  locSearchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    if (locSearchInput.value.trim().length < 3) { showResults(null); return; }
+    searchTimer = setTimeout(runLocationSearch, 800);
   });
 
-  // "Track my location" — recenter on the live GPS fix.
-  async function trackInto(mini, labelEl) {
-    if (!mini) return;
-    try {
-      await mini.flyToUser();
-      if (labelEl) labelEl.textContent = 'You are here';
-    } catch (err) {
-      if (labelEl) labelEl.textContent = 'Location unavailable';
-    }
-  }
-  document.getElementById('track-location-btn').addEventListener('click', () => trackInto(ensurePicker(), pickerLabel));
+  // "Use my location" inside the sheet: fly the map to the real GPS fix.
+  document.getElementById('track-location-btn').addEventListener('click', async () => {
+    if (!picker) return;
+    pickerLabel.textContent = 'Finding you…';
+    try { await picker.flyToUser(); }
+    catch (err) { pickerLabel.textContent = 'Location blocked or unavailable'; pickerAddress.textContent = BM.geoErrorText(err); }
+  });
 
-  // Setup SOS mini map: shows where you are, no dragging.
+  // Previews on the two screens
+  const reportMini = BM ? BM.createMiniMap(document.getElementById('report-mini-map'), { interactive: false }) : null;
   const sosMini = BM ? BM.createMiniMap(document.getElementById('sos-mini-map'), { interactive: false }) : null;
+  locTargets.set(reportLocText, { mini: reportMini, label: document.getElementById('report-mini-label') });
+  locTargets.set(sosLocText, { mini: sosMini, label: document.getElementById('sos-mini-label') });
   const sosTrackBtn = document.getElementById('sos-track-location-btn');
-  if (sosTrackBtn) {
-    sosTrackBtn.addEventListener('click', () =>
-      trackInto(sosMini, document.querySelector('[data-screen="setup-sos"] .mini-map-you-here')));
-  }
+  if (sosTrackBtn) sosTrackBtn.addEventListener('click', () => useMyLocation(sosLocText, document.getElementById('sos-mini-label'), sosTrackBtn));
+  const reportTrackBtn = document.getElementById('report-track-location-btn');
+  if (reportTrackBtn) reportTrackBtn.addEventListener('click', () => useMyLocation(reportLocText, document.getElementById('report-mini-label'), reportTrackBtn));
+  // previews were hidden when created: re-measure when their screens open
+  const remeasure = () => setTimeout(() => { [reportMini, sosMini].forEach((m) => m && m.map.invalidateSize()); }, 60);
+  document.querySelectorAll('[data-goto="report-emergency"], [data-goto="setup-sos"]').forEach((b) => b.addEventListener('click', remeasure));
 
   // First GPS fix: show live coordinates and swap the placeholder address for the real one.
   if (BM) {
@@ -814,12 +891,10 @@
       homeCoords.textContent = formatCoords(u.lat, u.lng);
       if (!first) return;
       const rev = await BayanihanAPI.reverseGeocode(u);
-      if (!rev.success) return;
-      const text = [rev.street, rev.city].filter(Boolean).join(', ') || rev.display;
+      const text = rev.success ? addrText(rev) : formatCoords(u.lat, u.lng);
       [reportLocText, sosLocText].forEach((el) => {
         if (el && !el.dataset.manual) { el.textContent = text; el.dataset.lat = u.lat; el.dataset.lng = u.lng; }
       });
-      pickerAddress.textContent = text;
     });
   }
 

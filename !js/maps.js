@@ -185,6 +185,7 @@ const BayanihanMaps = (() => {
     evac: pinIcon('evac'),
     incident: pinIcon('incident'),
     me: L.divIcon({ className: 'bm-me-wrap', html: '<span class="bm-me"></span>', iconSize: [20, 20], iconAnchor: [10, 10] }),
+    meSet: L.divIcon({ className: 'bm-me-wrap', html: '<span class="bm-me is-set"></span>', iconSize: [20, 20], iconAnchor: [10, 10] }),
     dropped: L.icon({ iconUrl: ORANGE_PIN_URL, iconSize: [32, 32], iconAnchor: [16, 31], popupAnchor: [0, -28] }),
   };
   const responderIcon = (kind) =>
@@ -195,9 +196,12 @@ const BayanihanMaps = (() => {
   let watchId = null;
   let firstFix = null;
   let lastSaved = null;
+  let manual = false;        // location was set by hand: GPS fixes no longer move the dot
+  let lastGps = null;        // newest real GPS fix, kept so "Use GPS" can switch back at once
   const subs = new Set();
 
   function pushUser(u) {
+    u.manual = manual;
     user = u;
     if (!lastSaved || API.distanceKm(lastSaved, u) > 0.05) {
       lastSaved = { lat: u.lat, lng: u.lng };
@@ -221,6 +225,30 @@ const BayanihanMaps = (() => {
     pushUser({ lat, lng, accuracy: accuracy || 30 });
   }
 
+  // Person chose where they are (indoors, bad GPS, planning for someone else).
+  function setManualPosition({ lat, lng }) {
+    manual = true;
+    pushUser({ lat, lng, accuracy: 20 });
+  }
+  // One real GPS reading, even while a hand-set location is active (used by the location pickers).
+  function currentGps() {
+    return new Promise((resolve, reject) => {
+      if (!('geolocation' in navigator)) { reject(new Error('unsupported')); return; }
+      navigator.geolocation.getCurrentPosition(
+        (p) => { lastGps = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }; resolve({ ...lastGps }); },
+        reject, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
+    });
+  }
+  // Back to automatic GPS.
+  async function useGps() {
+    const prev = user;
+    manual = false;
+    if (lastGps) { pushUser({ ...lastGps }); return user; }
+    user = null;
+    try { return await (watchId != null ? firstFix : beginWatch()); }
+    catch (err) { manual = true; user = prev; throw err; }
+  }
+
   // Resolves with the first fix; keeps watching afterwards.
   function startTracking() {
     if (!('geolocation' in navigator)) return Promise.reject(new Error('unsupported'));
@@ -237,7 +265,9 @@ const BayanihanMaps = (() => {
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
           const had = !!user;
-          pushUser({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+          lastGps = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+          if (manual) { if (!had) resolve(user); return; }   // keep the hand-set location
+          pushUser({ ...lastGps });
           if (!had) resolve(user);
         },
         (err) => {
@@ -538,8 +568,9 @@ const BayanihanMaps = (() => {
     shelter: '<path fill-rule="evenodd" d="M7 1.5 1 11.5h12L7 1.5zm0 3.2 3 5.3H4l3-5.3z"/>',
     hall: '<path d="M2 12V4l5-2.5L12 4v8H8.5V8h-3v4H2z"/>',
     gym: '<path d="M1 6h1.5V4H4v6H2.5V8H1zM13 6h-1.5V4H10v6h1.5V8H13zM4 6.2h6v1.6H4z"/>',
+    health: '<path d="M5 1.5h4V5h3.5v4H9v3.5H5V9H1.5V5H5z"/>',
   };
-  const KIND_NAME = { assembly: 'Assembly', shelter: 'Shelter', hall: 'Halls', school: 'Schools', gym: 'Gyms' };
+  const KIND_NAME = { assembly: 'Evacuation centers', shelter: 'Shelter', hall: 'Barangay halls', school: 'Public schools', gym: 'Gyms', health: 'Health centers' };
 
   const walkMin = (km) => Math.max(1, Math.round((km / 4.5) * 60));
   const fmtKm = (km) => (km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km');
@@ -689,6 +720,8 @@ const BayanihanMaps = (() => {
     let route = null;               // { dest, profile, routes, sel, hazard, from, fromGuess, auto }
     let routeProfile = 'foot';
     let pendingDest = null;
+    let routeFromPt = null;         // point A chosen by hand (null = my location)
+    let pick = null;                // place picker: { purpose: 'me' | 'A' | 'B', ll, name, marker }
     const loaded = { evac: null, water: null };
     let lastResp = null;
     let meMarker = null;
@@ -702,6 +735,7 @@ const BayanihanMaps = (() => {
     let wxRun = 0;
     let live = { gauges: [], slides: [], sig: '' };   // simulated live flood levels + landslide reports
     let repFilter = 'all';
+    const floodShow = { risk: true, live: true };   // Flood layer: risk map, live flooding, or both
     const itemMarkers = new Map();
     let terrainWarned = false;
     let sheetCollapsed = false;
@@ -732,6 +766,7 @@ const BayanihanMaps = (() => {
     L.DomEvent.disableScrollPropagation(sheet);
 
     function setSheet(headHtml, bodyHtml) {
+      if (pick) return;                       // the place picker owns the bottom while it is open
       const prevScroll = sheet.querySelector('.bm-scroll');
       const keepLeft = prevScroll ? prevScroll.scrollLeft : 0;
       sheet.hidden = false;
@@ -743,12 +778,18 @@ const BayanihanMaps = (() => {
          <div class="bm-sheet-main">${bodyHtml}</div>`;
       const sc = sheet.querySelector('.bm-scroll');
       if (sc && keepLeft) sc.scrollLeft = keepLeft;
+      syncFab();
     }
-    const hideSheet = () => { sheet.hidden = true; };
+    // The + / x menu sits just above the panel and rides up as the panel grows.
+    const syncFab = () => host.style.setProperty('--bm-sheet-h', sheet.hidden ? '0px' : sheet.offsetHeight + 'px');
+    if (window.ResizeObserver) new ResizeObserver(syncFab).observe(sheet);
+    const hideSheet = () => { sheet.hidden = true; syncFab(); };
+    // top edge (px from the map's top) of everything the panel and the menu cover
+    const coverTop = () => (sheet.hidden ? map.getSize().y : sheet.offsetTop - (host.querySelector('.map-fab-container') ? 68 : 0));
 
     // The panel covers the bottom of the map. Aim at the middle of what's still visible
     // so the place you're looking at never hides behind it.
-    const sheetPad = () => (sheet.hidden ? 0 : Math.max(0, map.getSize().y - sheet.offsetTop));
+    const sheetPad = () => (sheet.hidden ? 0 : Math.max(0, map.getSize().y - coverTop()));
     map.on('popupclose', () => {
       if (!autoCollapsed) return;
       autoCollapsed = false;
@@ -760,7 +801,7 @@ const BayanihanMaps = (() => {
     function revealPoint(ll) {
       if (sheet.hidden || !map.getSize().x) return;
       const pt = map.latLngToContainerPoint(ll);
-      if (pt.y > sheet.offsetTop - 28) map.panTo(aim(ll), { animate: true });
+      if (pt.y > coverTop() - 28) map.panTo(aim(ll), { animate: true });
     }
     // A popup needs room, so on a small screen the panel folds down to its title while one is open.
     let autoCollapsed = false;
@@ -778,7 +819,7 @@ const BayanihanMaps = (() => {
         const r = pe.getBoundingClientRect();
         const c = el.getBoundingClientRect();
         const top = c.top + 66;
-        const bottom = c.top + (sheet.hidden ? c.height : sheet.offsetTop) - 10;
+        const bottom = c.top + coverTop() - 10;
         const icon = e.popup._source && e.popup._source._icon;
         const lowest = Math.max(r.bottom, icon ? icon.getBoundingClientRect().bottom : 0);   // keep the pin itself in view too
         const dy = r.top < top ? r.top - top : lowest > bottom ? lowest - bottom : 0;
@@ -806,6 +847,10 @@ const BayanihanMaps = (() => {
       if (ovl === 'clouds') want.add('clouds');
       if (ovl === 'rain' || ovl === 'wind') want.add('wxgrid');
       if (!(extras.floodlive.waterLevel > 0)) want.delete('floodlive');
+      if (mode === 'flood') {
+        if (!floodShow.risk) ['lowground', 'water', 'hazardFlood'].forEach((k) => want.delete(k));
+        if (!floodShow.live) ['floodlive', 'liveFlood'].forEach((k) => want.delete(k));
+      }
       // relief shading helps on topography, and on the plain map under the landslide slopes
       if (baseName === 'topo' || (mode === 'landslide' && baseName === 'street')) want.add('hillshade');
       Object.entries(extras).forEach(([key, layer]) => {
@@ -832,7 +877,7 @@ const BayanihanMaps = (() => {
       drawReports();
       updateChip();
 
-      if (mode !== 'route') { groups.route.clearLayers(); pendingDest = null; route = null; }
+      if (mode !== 'route') { groups.route.clearLayers(); pendingDest = null; route = null; routeFromPt = null; }
       if (mode !== 'weather') stopRadar();
       terrainWarned = false;
 
@@ -953,7 +998,7 @@ const BayanihanMaps = (() => {
     }
 
     function evacSheet() {
-      if (map.getZoom() < 13) {
+      if (map.getZoom() < 12) {
         setSheet('<span class="bm-title">Evacuation sites</span>', '<p class="bm-empty">Zoom in to see evacuation sites around you.</p>');
         return;
       }
@@ -961,7 +1006,7 @@ const BayanihanMaps = (() => {
       const list = filteredSites();
       const near = refIsUser() ? nearestId() : null;
       const count = (k) => all.filter((c) => (k === 'all' ? true : k === 'assembly' ? (c.kind === 'assembly' || c.kind === 'shelter') : c.kind === k)).length;
-      const chips = [['all', 'All'], ['assembly', 'Assembly & shelters'], ['school', 'Schools'], ['hall', 'Halls'], ['gym', 'Gyms']]
+      const chips = [['all', 'All'], ['assembly', 'Official centers'], ['school', 'Public schools'], ['hall', 'Barangay halls'], ['health', 'Health centers'], ['gym', 'Gyms']]
         .filter(([k]) => k === 'all' || count(k))
         .map(([k, t]) => `<button type="button" class="bm-chip ${evacFilter === k ? 'is-on' : ''}" data-act="filter" data-k="${k}">${t} <em>${count(k)}</em></button>`)
         .join('');
@@ -986,15 +1031,21 @@ const BayanihanMaps = (() => {
 
     // quiet: loading them in the background under another layer, so no messages or panel changes
     async function loadEvac(force, stale, quiet) {
-      if (map.getZoom() < 13) { if (!quiet) { info('Zoom in to see evacuation sites.', 'warn'); renderSheet(); } return; }
+      if (map.getZoom() < 12) { info('Zoom in to see evacuation sites.', 'warn'); if (!quiet) renderSheet(); return; }
       const view = map.getBounds();
       if (!force && loaded.evac && loaded.evac.contains(view)) { annotateDistances(); if (!quiet) renderSheet(); else if (!groups.evac.getLayers().length) drawEvac(); return; }
-      if (!quiet) info('Finding evacuation sites…', 'busy');
+      info('Finding evacuation sites…', 'busy');
       const area = view.pad(0.15);
-      const res = await API.getEvacuationCenters(toBox(area));
+      let res = await API.getEvacuationCenters(toBox(area));
+      if (!res.success && !stale()) { await new Promise((r) => setTimeout(r, 1500)); if (stale()) return; res = await API.getEvacuationCenters(toBox(area)); }   // public servers are flaky: retry once
       if (stale()) return;
-      if (!res.success) { if (!quiet) info(res.error, 'error'); return; }
-      if (!quiet) info('');
+      if (!res.success) {
+        info('Evacuation sites could not load. Tap the layers button to retry, or pan the map.', 'error');
+        loaded.evac = null;
+        if (!quiet) renderSheet();
+        return;
+      }
+      info(res.centers.length ? '' : 'No mapped evacuation sites here yet. Try zooming out or moving the map.', res.centers.length ? '' : 'warn');
       loaded.evac = area;
       const oldRisk = new Map(evacItems.map((c) => [c.id, c.risk]));
       evacItems = res.centers.map((c) => ({ ...c, risk: oldRisk.get(c.id) || null }));
@@ -1141,20 +1192,39 @@ const BayanihanMaps = (() => {
       const w = outlook && outlook.weather;
       const riv = outlook && outlook.river;
       const lv = w ? Math.max(w.flood.level, riv ? riv.level : 0) : 0;
-      const head = `<span class="bm-title"><i class="bm-dot flood"></i>Flood risk ${w ? badge(lv) : ''}</span>
-        <span class="bm-sub">${w ? esc(liveFloodSummary()) + ` \u00b7 ${w.next24} mm rain expected` + (riv ? ` \u00b7 rivers ${riv.ratio}\u00d7 normal` : '') : 'Checking the forecast\u2026'}</span>`;
-      const body = `
-        <div class="bm-legend-title">Ground height above sea level</div>
+      const { risk, live: liveOn } = floodShow;
+      const bits = [];
+      if (w) {
+        if (liveOn) bits.push(esc(liveFloodSummary()));
+        bits.push(`${w.next24} mm rain expected`);
+        if (riv) bits.push(`rivers ${riv.ratio}× normal`);
+      }
+      const head = `<span class="bm-title"><i class="bm-dot flood"></i>Flood ${w ? badge(lv) : ''}</span>
+        <span class="bm-sub">${w ? bits.join(' · ') : 'Checking the forecast…'}</span>`;
+      const toggles = `<div class="bm-chips bm-toggles" role="group" aria-label="Flood layers">
+        <button type="button" class="bm-chip bm-tog ${risk ? 'is-on' : ''}" data-act="floodopt" data-k="risk" aria-pressed="${risk}"><i></i>Flood risk map</button>
+        <button type="button" class="bm-chip bm-tog ${liveOn ? 'is-on' : ''}" data-act="floodopt" data-k="live" aria-pressed="${liveOn}"><i></i>Live flooding</button></div>`;
+      const legend = [];
+      if (risk) {
+        legend.push(`<div class="bm-legend-title">Flood risk: ground height above sea level</div>
         <ul class="bm-steps">
           <li><i style="background:rgba(8,48,107,.75)"></i>Under 3 m</li>
           <li><i style="background:rgba(33,113,181,.7)"></i>3–6 m</li>
           <li><i style="background:rgba(66,146,198,.6)"></i>6–10 m</li>
           <li><i style="background:rgba(158,202,225,.55)"></i>10–20 m</li>
           <li><i class="bm-line-blue"></i>Waterway</li>
+        </ul>`);
+      }
+      if (liveOn) {
+        legend.push(`<div class="bm-legend-title">Live flooding (ground under 3 m)</div>
+        <ul class="bm-steps">
           <li><i style="background:rgb(0,214,255)"></i>Flooded now</li>
           <li><i class="bm-lg-gauge">cm</i>Live gauge</li>
         </ul>
-        <p class="bm-explain">${map.getZoom() < 12 ? 'Zoom in to see live gauges. ' : ''}Live flood levels only appear on ground under 3 m, where water collects first. ${extras.floodlive.waterLevel > 0 ? '' : 'No flooding is expected at the moment.'}</p>
+        <p class="bm-explain">${map.getZoom() < 12 ? 'Zoom in to see live gauges. ' : ''}${extras.floodlive.waterLevel > 0 ? 'Water is expected to collect on the lowest ground.' : 'No flooding is expected at the moment.'}</p>`);
+      }
+      if (!risk && !liveOn) legend.push('<p class="bm-explain">Turn on the flood risk map, live flooding, or both.</p>');
+      const body = `${toggles}${legend.join('')}
         ${hazardActions()}
         <p class="bm-foot">Live levels are simulated from terrain height and the forecast, not real gauge readings, and not an official flood map. See <a href="https://noah.up.edu.ph" target="_blank" rel="noopener">Project NOAH</a> and <a href="https://hazardhunter.georisk.gov.ph" target="_blank" rel="noopener">HazardHunterPH</a>.</p>`;
       setSheet(head, body);
@@ -1189,12 +1259,13 @@ const BayanihanMaps = (() => {
 
     /* ================= ROUTE ================= */
     function routeSheet() {
+      const ab = abBlock();
       const profBtns = `<div class="bm-seg" role="group" aria-label="Travel mode">
           <button type="button" data-act="profile" data-p="foot" class="${routeProfile === 'foot' ? 'is-on' : ''}">Walk</button>
           <button type="button" data-act="profile" data-p="driving" class="${routeProfile === 'driving' ? 'is-on' : ''}">Drive</button></div>`;
       if (!route || !route.routes) {
         setSheet('<span class="bm-title"><i class="bm-dot route"></i>Route to safety</span>',
-          `${profBtns}<p class="bm-empty">${route && route.error ? esc(route.error) : 'Finding the best way to a nearby evacuation site…'}</p>`);
+          `${ab}${profBtns}<p class="bm-empty">${route && route.error ? esc(route.error) : 'Finding the best way to a nearby evacuation site…'}</p>`);
         return;
       }
       const r = route.routes[route.sel];
@@ -1206,7 +1277,7 @@ const BayanihanMaps = (() => {
           `<li>${esc(s.text)}${s.distM ? `<em>${s.distM >= 1000 ? (s.distM / 1000).toFixed(1) + ' km' : s.distM + ' m'}</em>` : ''}</li>`).join('')}</ol></details>` : '';
       const head = `<span class="bm-title"><i class="bm-dot route"></i>${esc(route.dest.name)}</span>
         <span class="bm-sub"><b>${r.durationMin} min</b> · ${r.distanceKm} km ${route.profile === 'foot' ? 'on foot' : 'by road'}</span>`;
-      const body = `${profBtns}${alts}
+      const body = `${ab}${profBtns}${alts}
         ${route.auto ? `<p class="bm-explain">${esc(route.auto)}</p>` : ''}
         ${route.fromGuess ? '<p class="bm-risk r1">Location is off, so this starts from the map center. Tap ◎ to start from where you are.</p>' : ''}
         ${hz}${steps}
@@ -1242,8 +1313,10 @@ const BayanihanMaps = (() => {
       const r = route.routes[route.sel];
       L.polyline(r.points, { color: '#fff', weight: 11, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(groups.route);
       L.polyline(r.points, { color: '#E5342E', weight: 6, lineCap: 'round', lineJoin: 'round' }).addTo(groups.route);
-      L.circleMarker([route.from.lat, route.from.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#2F80ED', fillOpacity: 1 }).bindTooltip(route.fromGuess ? 'Start (map center)' : 'You', { direction: 'top' }).addTo(groups.route);
+      if (routeFromPt) L.marker([route.from.lat, route.from.lng], { icon: abIcon('A'), zIndexOffset: 700, title: 'Start (A)' }).addTo(groups.route);
+      else L.circleMarker([route.from.lat, route.from.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#2F80ED', fillOpacity: 1 }).bindTooltip(route.fromGuess ? 'Start (map center)' : 'You', { direction: 'top' }).addTo(groups.route);
       const c = route.dest;
+      if (c.custom) { L.marker([c.lat, c.lng], { icon: abIcon('B'), zIndexOffset: 800, title: c.name }).addTo(groups.route); return; }
       const full = evacItems.find((x) => x.id === c.id) || c;
       L.marker([c.lat, c.lng], { icon: evacIcon({ kind: full.kind || 'assembly', name: c.name, risk: full.risk }, { selected: true }), title: c.name, zIndexOffset: 800 })
         .bindPopup(() => sitePopup({ ...full, ...c }), POPUP_OPTS).addTo(groups.route);
@@ -1269,7 +1342,7 @@ const BayanihanMaps = (() => {
     }
 
     async function loadRoute(dest, stale) {
-      let from = user || API.getSavedLocation();
+      let from = routeFromPt || user || API.getSavedLocation();
       let fromGuess = false;
       if (!from) {
         info('Finding your location…', 'busy');
@@ -1406,6 +1479,7 @@ const BayanihanMaps = (() => {
       if (act === 'toggle') { sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('is-collapsed', sheetCollapsed); t.setAttribute('aria-expanded', String(!sheetCollapsed)); }
       else if (act === 'filter') { evacFilter = t.dataset.k; drawEvac(); renderSheet(); }
       else if (act === 'fitall') fitAllSites();
+      else if (act === 'floodopt') { floodShow[t.dataset.k] = !floodShow[t.dataset.k]; applyLayers(); renderSheet(); }
       else if (act === 'repfilter') { repFilter = t.dataset.k; renderSheet(); }
       else if (act === 'item') focusItem(t.dataset.id);
       else if (act === 'openreport') { e.stopPropagation(); if (o.onOpenReport) o.onOpenReport(t.dataset.id); }
@@ -1416,6 +1490,9 @@ const BayanihanMaps = (() => {
         if (c) routeTo(c);
       }
       else if (act === 'goto') setMode(t.dataset.m);
+      else if (act === 'pick') openPicker(t.dataset.p);
+      else if (act === 'swap') swapAB();
+      else if (act === 'autob') { routeTo(null); }
       else if (act === 'profile') { routeProfile = t.dataset.p; if (route && route.dest) routeTo(route.dest, true); else { renderSheet(); } }
       else if (act === 'alt') selectAlt(+t.dataset.i);
       else if (act === 'radar') toggleRadar();
@@ -1444,6 +1521,156 @@ const BayanihanMaps = (() => {
       routeTo({ lat: +btn.dataset.lat, lng: +btn.dataset.lng, name: btn.dataset.name, id: btn.dataset.id || undefined });
     }, true);
 
+    /* ---- place picker: edit my location, or choose point A / B of a route ---- */
+    const abIcon = (letter) => L.divIcon({ className: 'bm-pin-wrap', html: `<span class="bm-ab-pin ${letter === 'A' ? 'a' : 'b'}">${letter}</span>`, iconSize: [30, 38], iconAnchor: [15, 36] });
+    const pickLayer = L.layerGroup().addTo(map);
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'map-round-btn map-editloc-btn';
+    editBtn.setAttribute('aria-label', 'Edit my location');
+    editBtn.title = 'Edit my location';
+    editBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 18s5.5-5.1 5.5-9.2A5.5 5.5 0 0 0 4.5 8.8C4.5 12.9 10 18 10 18Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 8.6l1.4 1.4 2.6-2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    host.appendChild(editBtn);
+    editBtn.addEventListener('click', () => openPicker('me'));
+
+    const pickEl = document.createElement('section');
+    pickEl.className = 'bm-pick';
+    pickEl.hidden = true;
+    pickEl.setAttribute('aria-label', 'Choose a place');
+    host.appendChild(pickEl);
+    L.DomEvent.disableClickPropagation(pickEl);
+    L.DomEvent.disableScrollPropagation(pickEl);
+    const PICK_TITLE = { me: 'Set my location', A: 'Start point (A)', B: 'Destination (B)' };
+
+    function openPicker(purpose) {
+      if (pick) closePicker();
+      let start;
+      if (purpose === 'me') start = refPoint();
+      else if (purpose === 'A') start = routeFromPt || (route && route.from) || refPoint();
+      else start = (route && route.dest) || map.getCenter();
+      map.closePopup();
+      keep.pin.clearLayers();
+      pick = { purpose, ll: null, name: '' };
+      host.classList.add('is-picking');
+      hideSheet();
+      const gpsBtn = purpose !== 'B' ? `<button type="button" class="bm-btn" data-pk="gps">Use GPS</button>` : '';
+      const autoBtn = purpose === 'B' ? `<button type="button" class="bm-btn" data-pk="auto">Safest nearby site</button>` : '';
+      pickEl.innerHTML = `<div class="bm-pick-head"><b>${PICK_TITLE[purpose]}</b><button type="button" class="bm-pick-x" data-pk="cancel" aria-label="Cancel">×</button></div>
+        <form class="bm-pick-search" autocomplete="off"><input type="search" placeholder="Search a place or address" aria-label="Search a place"><button type="submit" class="bm-btn">Search</button></form>
+        <ul class="bm-pick-results" hidden></ul>
+        <p class="bm-pick-hint"><span class="bm-pick-addr">Tap the map or drag the pin.</span></p>
+        <div class="bm-pick-actions">${gpsBtn}${autoBtn}<button type="button" class="bm-btn bm-btn-green" data-pk="ok">Set here</button></div>`;
+      pickEl.hidden = false;
+      setPick(L.latLng(start.lat, start.lng), '', true);
+      map.setView(aim(pick.ll, Math.max(map.getZoom(), 15)), Math.max(map.getZoom(), 15), { animate: false });
+    }
+
+    let pickTok = 0;
+    function setPick(ll, name, quiet) {
+      if (!pick) return;
+      pick.ll = L.latLng(ll.lat, ll.lng);
+      pick.name = name || '';
+      if (!pick.marker) {
+        pick.marker = L.marker(pick.ll, { icon: pick.purpose === 'me' ? ICONS.dropped : abIcon(pick.purpose), draggable: true, zIndexOffset: 2000 }).addTo(pickLayer);
+        pick.marker.on('dragend', () => setPick(pick.marker.getLatLng()));
+      } else pick.marker.setLatLng(pick.ll);
+      const addr = pickEl.querySelector('.bm-pick-addr');
+      if (name) { addr.textContent = name; return; }
+      addr.textContent = quiet ? 'Tap the map or drag the pin.' : 'Looking up address…';
+      if (quiet) return;
+      const tok = ++pickTok;
+      API.reverseGeocode({ lat: ll.lat, lng: ll.lng }).then((rev) => {
+        if (!pick || tok !== pickTok) return;
+        pick.name = rev.success ? rev.display.split(',').slice(0, 3).join(',') : '';
+        addr.textContent = pick.name || 'Pin placed. Drag it to fine-tune.';
+      });
+    }
+
+    function closePicker() {
+      if (!pick) return;
+      pick = null;
+      pickLayer.clearLayers();
+      pickEl.hidden = true;
+      host.classList.remove('is-picking');
+      renderSheet();
+    }
+
+    function confirmPick() {
+      if (!pick || !pick.ll) return;
+      const { purpose, ll } = pick;
+      const name = pick.name ? pick.name.split(',')[0] : (purpose === 'B' ? 'Chosen destination' : 'Chosen point');
+      closePicker();
+      touched = true;
+      if (purpose === 'me') {
+        setManualPosition({ lat: ll.lat, lng: ll.lng });
+        map.setView(aim(ll, Math.max(map.getZoom(), 16)), Math.max(map.getZoom(), 16), { animate: false });
+        info('Your location is set by hand. Tap the pin button and choose Use GPS to go back to automatic.', 'warn');
+        setTimeout(() => info(''), 5000);
+        if (mode === 'weather') loadOutlook(); else if (mode === 'route' && route && route.dest && !routeFromPt) routeTo(route.dest, true); else run(false);
+      } else if (purpose === 'A') {
+        routeFromPt = { lat: ll.lat, lng: ll.lng, name };
+        if (mode === 'route') routeTo(route && route.dest && !route.dest.auto ? route.dest : null, true); else { pendingDest = null; setMode('route'); }
+      } else {
+        routeTo({ lat: ll.lat, lng: ll.lng, name, custom: true });
+      }
+    }
+
+    pickEl.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-pk]');
+      if (!b) return;
+      const k = b.dataset.pk;
+      if (k === 'cancel') closePicker();
+      else if (k === 'ok') confirmPick();
+      else if (k === 'auto') { closePicker(); routeTo(null); }
+      else if (k === 'gps') {
+        const purpose = pick && pick.purpose;
+        if (purpose === 'A') { routeFromPt = null; closePicker(); routeTo(route && route.dest && !route.dest.auto ? route.dest : null, true); return; }
+        closePicker();
+        info('Finding your location…', 'busy');
+        try { const u = await useGps(); touched = true; map.setView(aim([u.lat, u.lng], 16), 16, { animate: false }); info(''); if (mode === 'weather') loadOutlook(); else run(false); }
+        catch (err) { info(geoErrorText(err), 'error'); }
+      }
+    });
+    pickEl.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = pickEl.querySelector('input');
+      const list = pickEl.querySelector('.bm-pick-results');
+      const q = input.value.trim();
+      if (q.length < 2) return;
+      list.hidden = false; list.innerHTML = '<li class="is-empty">Searching…</li>';
+      const res = await API.searchPlaces(q);
+      if (!pick) return;
+      list.innerHTML = '';
+      if (!res.success || !res.places.length) { list.innerHTML = `<li class="is-empty">${esc(res.success ? 'No places found in the Philippines for that search.' : res.error)}</li>`; return; }
+      res.places.forEach((p) => {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.innerHTML = `<strong>${esc(p.name)}</strong><span>${esc(p.display.split(',').slice(1, 4).join(',').trim())}</span>`;
+        b.addEventListener('click', () => { list.hidden = true; input.value = p.name; setPick({ lat: p.lat, lng: p.lng }, p.display.split(',').slice(0, 3).join(',')); map.setView(aim([p.lat, p.lng], 16), 16, { animate: false }); });
+        li.appendChild(b); list.appendChild(li);
+      });
+    });
+
+    // A (from) and B (to) summary at the top of the route panel
+    function abBlock() {
+      const manualMe = user && user.manual;
+      const fromName = routeFromPt ? routeFromPt.name : (manualMe ? 'My location (set by hand)' : refIsUser() ? 'My location' : 'Map center');
+      const toName = route && route.dest && !route.dest.auto ? route.dest.name : 'Safest nearby site';
+      return `<div class="bm-ab">
+        <div class="bm-ab-row"><i class="bm-ab-dot a">A</i><span class="bm-ab-txt"><small>From</small>${esc(fromName)}</span><button type="button" class="bm-ab-edit" data-act="pick" data-p="A">Change</button></div>
+        <button type="button" class="bm-ab-swap" data-act="swap" aria-label="Swap start and destination" ${route && route.dest ? '' : 'disabled'}>⇅</button>
+        <div class="bm-ab-row"><i class="bm-ab-dot b">B</i><span class="bm-ab-txt"><small>To</small>${esc(toName)}</span><button type="button" class="bm-ab-edit" data-act="pick" data-p="B">Change</button></div>
+      </div>`;
+    }
+    function swapAB() {
+      if (!route || !route.dest || !route.from) return;
+      const a = { lat: route.dest.lat, lng: route.dest.lng, name: route.dest.name };
+      const b = { lat: route.from.lat, lng: route.from.lng, name: routeFromPt ? routeFromPt.name : 'My location', custom: true };
+      routeFromPt = a;
+      routeTo(b, true);
+    }
+
     /* ---- GPS dot ---- */
     onUser((u, first) => {
       const ll = [u.lat, u.lng];
@@ -1454,6 +1681,9 @@ const BayanihanMaps = (() => {
         meMarker.setLatLng(ll);
         meAccuracy.setLatLng(ll).setRadius(u.accuracy || 30);
       }
+      meMarker.setIcon(u.manual ? ICONS.meSet : ICONS.me);
+      editBtn.classList.toggle('is-set', !!u.manual);
+      editBtn.title = u.manual ? 'Your location is set by hand. Tap to change it.' : 'Edit my location';
       if (first && !touched) map.setView(aim(ll, 15), 15, { animate: false });
       if (first && (mode === 'evacuation' || mode === 'route') && evacItems.length) { annotateDistances(); drawEvac(); renderSheet(); }
     });
@@ -1706,7 +1936,7 @@ const BayanihanMaps = (() => {
         }
       }
     }
-    map.on('click', (e) => { hideResults(); dropPin(e.latlng); });
+    map.on('click', (e) => { hideResults(); if (pick) { setPick(e.latlng); return; } dropPin(e.latlng); });
 
     function goToPlace(p) {
       touched = true;
@@ -1831,7 +2061,7 @@ const BayanihanMaps = (() => {
       center: () => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; },
       setView(ll, z) { touched = true; map.setView(ll, z || zoom); },
       async flyToUser() {
-        const u = await startTracking();
+        const u = await currentGps();
         touched = true;
         map.flyTo([u.lat, u.lng], Math.max(map.getZoom(), zoom));
         return u;
@@ -1857,7 +2087,7 @@ const BayanihanMaps = (() => {
 
   return {
     createFullMap, createMiniMap, createBackdrop,
-    startTracking, onUser, setUserPosition, addIncident, removeIncident,
+    startTracking, onUser, setUserPosition, setManualPosition, useGps, currentGps, addIncident, removeIncident,
     geoErrorText, getUser: () => user,
   };
 })();

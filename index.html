@@ -732,10 +732,6 @@
               <span>Settings</span>
               <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
-            <button class="menu-row" type="button" data-goto="settings">
-              <span>Settings / About</span>
-              <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </button>
           </nav>
 
           <button class="btn-outline-red btn-logout" id="logout-btn" type="button">Logout</button>
@@ -835,9 +831,19 @@
         <div class="location-card-box">
           <div class="loc-text">
             <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
-            <span id="report-loc-text">6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+            <span id="report-loc-text">Finding your location&hellip; or tap Change</span>
           </div>
           <button class="change-link" type="button" id="btn-change-location">Change</button>
+        </div>
+        <div class="mini-map mini-map-preview">
+          <div class="mini-map-canvas" id="report-mini-map" aria-label="Map of the emergency location"></div>
+          <span class="mini-map-pin" aria-hidden="true"></span>
+          <button class="mini-map-tap" type="button" id="report-mini-tap" aria-label="Change location on the map"></button>
+          <span class="mini-map-you-here" id="report-mini-label">You are here</span>
+          <button class="track-location-pill" type="button" id="report-track-location-btn">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
+            Use my location
+          </button>
         </div>
 
         <!-- PROOF BUTTONS WITH ICONS -->
@@ -1034,7 +1040,7 @@
         <div class="location-card-box">
           <div class="loc-text">
             <img src="!assets/!buttons/Pin.png" class="loc-icon-img" alt="Location Pin">
-            <span id="sos-loc-text">6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+            <span id="sos-loc-text">Finding your location&hellip; or tap Change</span>
           </div>
           <button class="change-link" type="button" id="btn-sos-change-location">Change</button>
         </div>
@@ -1042,10 +1048,11 @@
         <div class="mini-map">
           <div class="mini-map-canvas" id="sos-mini-map" aria-label="Map of your location"></div>
           <span class="mini-map-pin" aria-hidden="true"></span>
-          <span class="mini-map-you-here">You are here</span>
+          <button class="mini-map-tap" type="button" id="sos-mini-tap" aria-label="Change location on the map"></button>
+          <span class="mini-map-you-here" id="sos-mini-label">You are here</span>
           <button class="track-location-pill" type="button" id="sos-track-location-btn">
             <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
-            Track my location
+            Use my location
           </button>
         </div>
 
@@ -1314,33 +1321,37 @@
         <h3>Select Location</h3>
       </div>
 
-      <label class="sheet-search">
-        <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m18 18-3.8-3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <input type="search" id="location-search-input" placeholder="Search address or place, then press Enter" autocomplete="off">
-      </label>
+      <form class="sheet-search-row" id="location-search-form" autocomplete="off">
+        <label class="sheet-search">
+          <svg viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.6"/><path d="m18 18-3.8-3.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input type="search" id="location-search-input" placeholder="Search a place, street or barangay" autocomplete="off" enterkeyhint="search">
+        </label>
+        <button type="submit" class="sheet-search-btn">Search</button>
+      </form>
+      <ul class="loc-results" id="location-search-results" hidden></ul>
 
       <div class="mini-map">
         <div class="mini-map-canvas" id="picker-mini-map" aria-label="Drag the map to choose a location"></div>
         <span class="mini-map-pin" aria-hidden="true"></span>
-        <span class="mini-map-you-here" id="picker-label">Drag map to set location</span>
+        <span class="mini-map-you-here" id="picker-label">Drag the map to move the pin</span>
         <button class="track-location-pill" type="button" id="track-location-btn">
           <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/><path d="M8 0v2.5M8 13.5V16M0 8h2.5M13.5 8H16" stroke="currentColor" stroke-width="1.4"/></svg>
-          Track my location
+          Use my location
         </button>
       </div>
 
       <div class="mini-map-address">
         <img src="!assets/!buttons/Pin.png" alt="">
-        <span id="picker-address">Buenavista-Lawaan Rd., Balangiga, Eastern Samar</span>
+        <span id="picker-address">Move the map to choose a spot</span>
       </div>
 
       <div class="sheet-fields">
         <input type="text" id="loc-house-input" placeholder="House Number/Building, Flr (Optional)">
-        <input type="text" id="loc-street-input" class="is-focused" value="Buenavista-Lawaan Rd., Balangiga">
-        <input type="text" id="loc-city-input" value="Eastern Samar">
+        <input type="text" id="loc-street-input" placeholder="Street / barangay">
+        <input type="text" id="loc-city-input" placeholder="City / province">
       </div>
 
-      <button type="button" class="btn-primary-red" id="confirm-location-btn">Confirm Location</button>
+      <button type="button" class="btn-primary-red" id="confirm-location-btn">Confirm location</button>
     </div>
   </div>
 
