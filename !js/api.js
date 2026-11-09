@@ -760,26 +760,34 @@ const BayanihanAPI = (() => {
     const orig = api.getEvacuationCenters.bind(api);
     const inBox = (p, b) => p.lat >= b.south && p.lat <= b.north && p.lng >= b.west && p.lng <= b.east;
     // Built-in list (!js/evac-backup.js): used only when live search fails or finds nothing.
+    // Saved sites = the generated list (evac-backup.js) + hand-entered ones (evac-manual.js).
+    const savedSites = () => {
+      const g = (window.BAYANIHAN_EVAC_BACKUP && Array.isArray(window.BAYANIHAN_EVAC_BACKUP.sites)) ? window.BAYANIHAN_EVAC_BACKUP.sites : [];
+      const m = Array.isArray(window.BAYANIHAN_EVAC_MANUAL) ? window.BAYANIHAN_EVAC_MANUAL : [];
+      if (!m.length) return g;
+      const ids = new Set(m.map((x) => x.id));
+      return m.concat(g.filter((x) => !ids.has(x.id)));
+    };
     const backupFor = (box) => {
-      const b = window.BAYANIHAN_EVAC_BACKUP;
-      if (!b || !Array.isArray(b.sites) || !b.sites.length) return null;
-      const centers = b.sites.filter((s) => inBox(s, box)).map((s) => ({ outline: null, facilities: {}, ...s, fromBackup: true }));
+      const all = savedSites();
+      if (!all.length) return null;
+      const b = window.BAYANIHAN_EVAC_BACKUP || {};
+      const centers = all.filter((s) => inBox(s, box)).map((s) => ({ outline: null, facilities: {}, ...s, fromBackup: true }));
       return centers.length ? { success: true, centers, stale: true, backup: true, updatedAt: b.generated ? Date.parse(b.generated) : null } : null;
     };
-    const hasBackup = () => { const b = window.BAYANIHAN_EVAC_BACKUP; return !!(b && Array.isArray(b.sites) && b.sites.length); };
+    const hasBackup = () => savedSites().length > 0;
     const bad = (box) => backupFor(box);
     const rad = (d) => d * Math.PI / 180;
     // nearest saved site to a point (used to offer "Show saved sites" when the view is outside the saved areas)
     api.nearestBackupSite = (lat, lng) => {
-      if (!hasBackup()) return null;
       let best = null;
-      window.BAYANIHAN_EVAC_BACKUP.sites.forEach((s) => {
+      savedSites().forEach((s) => {
         const d = Math.hypot((s.lat - lat), (s.lng - lng) * Math.cos(rad(lat)));
         if (!best || d < best.d) best = { d, site: s };
       });
       return best ? { lat: best.site.lat, lng: best.site.lng, name: best.site.name, km: best.d * 111 } : null;
     };
-    api.getBackupInfo = () => hasBackup() ? { count: window.BAYANIHAN_EVAC_BACKUP.sites.length, generated: window.BAYANIHAN_EVAC_BACKUP.generated } : null;
+    api.getBackupInfo = () => hasBackup() ? { count: savedSites().length, generated: (window.BAYANIHAN_EVAC_BACKUP || {}).generated } : null;
 
     // The built-in list is the PRIMARY source: it answers instantly, with or without signal.
     // The live search only runs when (a) the saved list has nothing for this view, or

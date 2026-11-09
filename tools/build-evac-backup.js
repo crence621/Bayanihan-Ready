@@ -18,7 +18,7 @@ const root = path.join(__dirname, '..');
 // Samar island scope. [name, south, west, north, east]. Each box is about 11 km across (about 0.1 degree),
 // centered on the town. Add more towns here, or use --bbox for one-off areas.
 const AREAS = [
-  ['Balangiga, Eastern Samar', 11.398, 125.334, 11.498, 125.434],
+  ['Balangiga, Eastern Samar', 11.050, 125.330, 11.150, 125.430],
   ['Borongan City, Eastern Samar', 11.557, 125.382, 11.657, 125.482],
   ['Guiuan, Eastern Samar', 10.983, 125.672, 11.083, 125.772],
   ['Oras, Eastern Samar', 12.100, 125.383, 12.200, 125.483],
