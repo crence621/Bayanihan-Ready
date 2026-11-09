@@ -51,6 +51,16 @@ const BayanihanAPI = (() => {
   const OSRM = 'https://router.project-osrm.org';
   const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
 
+  /* PAGASA Tropical Cyclone Wind Signals (5 levels): winds of this strength are expected
+     within `hours`. Used to ESTIMATE a signal from the forecast; the official signal is always PAGASA's. */
+  const TCWS_LEVELS = [
+    { level: 1, min: 39,  hours: 36, name: 'Strong winds',          range: '39\u201361 km/h',   threat: 'Minimal to minor threat to life and property' },
+    { level: 2, min: 62,  hours: 24, name: 'Gale-force winds',      range: '62\u201388 km/h',   threat: 'Minor to moderate threat' },
+    { level: 3, min: 89,  hours: 18, name: 'Storm-force winds',     range: '89\u2013117 km/h',  threat: 'Moderate to significant threat' },
+    { level: 4, min: 118, hours: 12, name: 'Typhoon-force winds',   range: '118\u2013184 km/h', threat: 'Significant to severe threat' },
+    { level: 5, min: 185, hours: 12, name: 'Typhoon-force winds',   range: '185 km/h or more',   threat: 'Extreme threat' },
+  ];
+
   async function fetchJSON(url, options = {}, timeoutMs = 15000) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -566,6 +576,41 @@ const BayanihanAPI = (() => {
        moisture. From these it derives rough FLOOD and LANDSLIDE trigger
        levels. These are estimates, NOT official PAGASA / MGB warnings.
     --------------------------------------------------------------- */
+    /* ---------------------------------------------------------------
+       TYPHOON WIND OUTLOOK at a point (Open-Meteo, next 48 h): the strongest
+       sustained wind and gust, lowest pressure, and the PAGASA wind signal those
+       winds would match. Forecast models often UNDER-estimate typhoons, so this is
+       a rough guide only, never an official signal.
+    --------------------------------------------------------------- */
+    TCWS: TCWS_LEVELS,
+    async getTyphoonOutlook({ lat, lng }) {
+      try {
+        const url = `${OPEN_METEO}?latitude=${lat}&longitude=${lng}` +
+          '&hourly=wind_speed_10m,wind_gusts_10m,pressure_msl&forecast_hours=48&timezone=auto&wind_speed_unit=kmh';
+        const d = await fetchJSON(url);
+        const h = d.hourly || {};
+        const wind = (h.wind_speed_10m || []).map((v) => v || 0);
+        const gust = (h.wind_gusts_10m || []).map((v) => v || 0);
+        const pres = (h.pressure_msl || []).filter((v) => v != null);
+        if (!wind.length) throw new Error('no data');
+        const maxIn = (arr, hrs) => Math.max(0, ...arr.slice(0, hrs));
+        let level = 0;
+        for (let k = TCWS_LEVELS.length - 1; k >= 0; k--) {
+          const t = TCWS_LEVELS[k];
+          if (maxIn(wind, t.hours) >= t.min) { level = t.level; break; }
+        }
+        const maxWind = Math.round(maxIn(wind, 48));
+        return {
+          success: true, level,
+          maxWind, maxGust: Math.round(maxIn(gust, 48)),
+          peakInH: wind.indexOf(Math.max(...wind)),
+          minPressure: pres.length ? Math.round(Math.min(...pres)) : null,
+        };
+      } catch (err) {
+        return { success: false, error: 'The wind forecast is unavailable right now.' };
+      }
+    },
+
     async getWeatherOutlook({ lat, lng }) {
       const LEVELS = ['Low', 'Moderate', 'High', 'Severe'];
       const sum = (a, from, to) => {
@@ -734,6 +779,7 @@ const BayanihanAPI = (() => {
   const r2 = (n) => Math.round(n * 100) / 100;
   const SIMPLE = {
     getWeatherOutlook: (a) => `wx:${r2(a.lat)},${r2(a.lng)}`,
+    getTyphoonOutlook: (a) => `ty:${r2(a.lat)},${r2(a.lng)}`,
     getRiverOutlook: (a) => `river:${r2(a.lat)},${r2(a.lng)}`,
     getNearbyResponders: (a) => `resp:${r2(a.lat)},${r2(a.lng)}`,
   };

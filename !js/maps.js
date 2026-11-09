@@ -406,6 +406,9 @@ const BayanihanMaps = (() => {
       past24: 62, past72: 180, next6: 48, next24: 130, maxRate: 28, maxProb: 98, rateLabel: 'Intense', soil: 0.5,
       hourly, days, flood: { level: 3, label: 'Severe' }, landslide: { level: 3, label: 'Severe' } };
   }
+  function demoTyphoon(d) {
+    return { ...(d && d.success ? d : {}), success: true, demo: true, level: 3, maxWind: 112, maxGust: 148, peakInH: 9, minPressure: 972 };
+  }
   function demoItems(at, wantFlood, wantSlide) {
     const km = 1 / 111;   // about 1 km in degrees of latitude
     const out = { gauges: [], slides: [] };
@@ -541,6 +544,16 @@ const BayanihanMaps = (() => {
           for (let x = 0; x < 256; x++) {
             const el = e[y * 256 + x];
             if (el <= 0.3) continue;                      // sea
+            if (this.kind === 'surge') {                  // storm surge scenario: all ground lower than the chosen height
+              const d = this.waterLevel - el;
+              if (d <= 0) continue;
+              const o = (y * 256 + x) * 4;
+              if (d > 3)        { px[o] = 10;  px[o + 1] = 30;  px[o + 2] = 120; px[o + 3] = 215; }
+              else if (d > 1.5) { px[o] = 30;  px[o + 1] = 90;  px[o + 2] = 220; px[o + 3] = 195; }
+              else if (d > 0.5) { px[o] = 40;  px[o + 1] = 160; px[o + 2] = 240; px[o + 3] = 175; }
+              else              { px[o] = 120; px[o + 1] = 215; px[o + 2] = 250; px[o + 3] = 160; }
+              continue;
+            }
             if (this.kind === 'live') {                   // simulated floodwater, ground under 3 m only
               const d = this.waterLevel - el;
               if (d <= 0) continue;
@@ -682,6 +695,7 @@ const BayanihanMaps = (() => {
     reports:    { extra: [] },   // only the reports themselves; no flood meters or simulated pins
     evacuation: { extra: ['evacArea', 'evac', 'responders'], minZoom: 13, zoomTo: 15 },
     flood:      { extra: ['lowground', 'floodlive', 'water', 'hazardFlood', 'liveFlood'] },
+    surge:      { extra: ['surge'] },   // storm surge scenario + typhoon wind signal
     route:      { extra: ['route'], minZoom: 13, zoomTo: 15 },   // sites are loaded for the route but only drawn on the Evacuation layer
   };
 
@@ -692,6 +706,36 @@ const BayanihanMaps = (() => {
     wind:   'Wind',
   };
   const LV = ['Low', 'Moderate', 'High', 'Severe'];
+
+  /* ---- Typhoon wind signal (PAGASA TCWS) ---- */
+  const TCWS_KEY = 'bm.tcws.v1';
+  const TCWS_COL = ['#16A34A', '#2D7FD6', '#CA8A04', '#EA580C', '#DC2626', '#A21CAF'];
+  const TCWS_ACTION = [
+    'No wind signal is forecast right now. Stay updated on PAGASA bulletins.',
+    'Get ready: secure loose objects, charge phones and check your go bag.',
+    'Stay indoors if you can. Families on the coast or low ground should be ready to move.',
+    'If you live on the coast, near a river or on low ground, move to an evacuation site. Follow your barangay.',
+    'Move to a safe evacuation site now if you are advised to. Do not stay in coastal or low-lying homes.',
+    'Move to a safe evacuation site now if you are advised to. Do not stay in coastal or low-lying homes.',
+  ];
+  // The signal you typed in from the PAGASA bulletin. Expires after 18 h so an old one is never trusted.
+  function manualSignal() {
+    try {
+      const v = JSON.parse(localStorage.getItem(TCWS_KEY));
+      if (v && v.level > 0 && Date.now() - v.time < 18 * 3600 * 1000) return v;
+    } catch (e) { /* storage blocked */ }
+    return null;
+  }
+  function setManualSignal(n) {
+    try {
+      if (n > 0) localStorage.setItem(TCWS_KEY, JSON.stringify({ level: n, time: Date.now() }));
+      else localStorage.removeItem(TCWS_KEY);
+    } catch (e) { /* storage blocked */ }
+  }
+  const agoText = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+  const tcwsPill = (n) => (n > 0
+    ? `<span class="bm-badge" style="background:${TCWS_COL[n]};color:#fff">Signal No. ${n}</span>`
+    : '<span class="bm-badge lv0">No signal</span>');
   const badge = (lv, text) => `<span class="bm-badge lv${lv}">${esc(text || LV[lv])}</span>`;
   const dayName = (iso, i) => (i === 0 ? 'Today' : new Date(iso + 'T12:00:00').toLocaleDateString([], { weekday: 'short' }));
 
@@ -737,6 +781,7 @@ const BayanihanMaps = (() => {
       slope: new TerrainLayer('slope', { zIndex: 6, attribution: 'Elevation: Mapzen / AWS Terrain Tiles' }),
       lowground: new TerrainLayer('flood', { zIndex: 6, attribution: 'Elevation: Mapzen / AWS Terrain Tiles' }),
       floodlive: new TerrainLayer('live', { zIndex: 7, minZoom: 11, attribution: 'Elevation: Mapzen / AWS Terrain Tiles' }),
+      surge: new TerrainLayer('surge', { zIndex: 7, attribution: 'Elevation: Mapzen / AWS Terrain Tiles' }),
       clouds: null,
       hazardLandslide: HAZARD_WMS.landslide
         ? L.tileLayer.wms(HAZARD_WMS.landslide.url, { layers: HAZARD_WMS.landslide.layers, format: 'image/png', transparent: true, opacity: 0.6, zIndex: 6 })
@@ -774,6 +819,10 @@ const BayanihanMaps = (() => {
     let meAccuracy = null;
     let outlook = null;             // { at:{lat,lng}, weather, river }
     let outlookBusy = false;
+    let typhoon = null;             // { at, time, data }: wind forecast and estimated PAGASA signal
+    let typhoonBusy = false;
+    let surgeH = 2;                 // storm surge scenario height in metres
+    let surgeHere = null;           // { elev }: ground height at your location
     let radar = { frames: [], idx: 0, timer: null, playing: false };
     let demo = false;               // Demo storm: forced severe forecast + a gauge and blocked road near you
     let ovl = 'none';               // weather overlay on top of any layer: radar / clouds / rain / wind
@@ -996,6 +1045,7 @@ const BayanihanMaps = (() => {
         else if (map.hasLayer(layer)) map.removeLayer(layer);
       });
       extras.hillshade.setOpacity(baseName === 'topo' ? 0.3 : 0.4);
+      extras.surge.waterLevel = surgeH;      // the storm surge height is read when its tiles are drawn
     }
 
     function setBase(name) {
@@ -1039,7 +1089,7 @@ const BayanihanMaps = (() => {
     }
 
     /* ---- terrain tile problems ---- */
-    ['slope', 'lowground'].forEach((k) => extras[k].on('tileerror', () => {
+    ['slope', 'lowground', 'surge'].forEach((k) => extras[k].on('tileerror', () => {
       if (terrainWarned || !map.hasLayer(extras[k])) return;
       terrainWarned = true;
       info('Elevation data couldn’t load. Check your connection and try again.', 'error');
@@ -1455,6 +1505,92 @@ const BayanihanMaps = (() => {
       setSheet(head, body);
     }
 
+    async function loadTyphoon() {
+      const c = map.getCenter();
+      const pt = user ? { lat: user.lat, lng: user.lng } : { lat: c.lat, lng: c.lng };
+      const fresh = typhoon && API.distanceKm(typhoon.at, pt) < 6 && Date.now() - typhoon.time < 10 * 60 * 1000;
+      if (fresh || typhoonBusy) return;
+      typhoonBusy = true;
+      info('Checking the wind forecast\u2026', 'busy');
+      try {
+        let d = await API.getTyphoonOutlook(pt);
+        trackData(d);
+        if (demo) d = demoTyphoon(d);
+        if (!d.success) { info(d.error, 'error'); return; }
+        info('');
+        typhoon = { at: pt, time: Date.now(), data: d };
+      } finally { typhoonBusy = false; }
+    }
+
+    async function loadSurgeHere() {
+      if (!user) { surgeHere = null; return; }
+      const t = await terrainAt(L.latLng(user.lat, user.lng));
+      surgeHere = t ? { elev: t.elev } : null;
+    }
+
+    function setSurgeHeight(h) {
+      if (!(h > 0)) return;
+      surgeH = h;
+      extras.surge.waterLevel = h;
+      if (map.hasLayer(extras.surge)) extras.surge.redraw();
+      renderSheet();
+    }
+
+    function surgeSheet() {
+      const man = manualSignal();
+      const ty = typhoon && typhoon.data;
+      const level = man ? man.level : ty ? ty.level : null;
+      const sub = man ? `Official signal you entered \u00b7 ${esc(agoText(man.time))}`
+        : ty ? (ty.stale ? `Offline: saved forecast from ${esc(agoText(ty.updatedAt))}` : ty.level > 0 ? `Estimated from forecast winds up to ${ty.maxWind} km/h` : 'No signal-level winds forecast in 48 h')
+        : 'Checking the wind forecast\u2026';
+      const head = `<span class="bm-title"><i class="bm-dot flood"></i>Storm surge &amp; typhoon ${level == null ? '' : tcwsPill(level)}</span>
+        <span class="bm-sub">${sub}</span>`;
+
+      const tc = API.TCWS;
+      const row = [0, 1, 2, 3, 4, 5].map((k) => {
+        const on = (man ? man.level : 0) === k;
+        return `<button type="button" class="bm-chip bm-tog ${on ? 'is-on' : ''}" data-act="tcws" data-k="${k}" aria-pressed="${on}">${k === 0 ? 'None' : 'No. ' + k}</button>`;
+      }).join('');
+      let est = '<p class="bm-explain">Checking the wind forecast\u2026</p>';
+      if (ty) {
+        const info1 = tc.find((x) => x.level === ty.level);
+        est = ty.level > 0
+          ? `<p class="bm-explain"><b>Forecast estimate:</b> ${tcwsPill(ty.level)} ${esc(info1.name)} (${esc(info1.range)}). ${esc(info1.threat)}.
+              Winds up to ${ty.maxWind} km/h, gusts ${ty.maxGust} km/h, strongest ${ty.peakInH < 1 ? 'now' : 'in about ' + ty.peakInH + ' h'}${ty.minPressure ? ` \u00b7 lowest pressure ${ty.minPressure} hPa` : ''}.${ty.demo ? ' <b>DEMO values.</b>' : ''}</p>`
+          : `<p class="bm-explain"><b>Forecast estimate:</b> no wind signal expected in the next 48 h (strongest wind ${ty.maxWind} km/h).</p>`;
+      }
+      const staleNote = ty && ty.stale ? `<p class="bm-explain bm-advice"><b>No signal.</b> This forecast was saved ${esc(agoText(ty.updatedAt))} and may be out of date. Check PAGASA or your barangay for the latest signal.</p>` : '';
+      const advice = level == null ? '' : `<p class="bm-explain bm-advice">${esc(TCWS_ACTION[level])}</p>`;
+      const signal = `<div class="bm-legend-title">Typhoon wind signal</div>
+        <p class="bm-explain">Official signal from PAGASA (tap the one announced for your area):</p>
+        <div class="bm-chips bm-toggles" role="group" aria-label="Official PAGASA signal">${row}</div>
+        ${est}${staleNote}${advice}`;
+
+      const heights = [1, 2, 3, 4, 5].map((h) =>
+        `<button type="button" class="bm-chip bm-tog ${surgeH === h ? 'is-on' : ''}" data-act="surgeh" data-h="${h}" aria-pressed="${surgeH === h}">${h} m</button>`).join('');
+      let here = '<p class="bm-explain">Turn on location to check your own spot.</p>';
+      if (surgeHere) {
+        const e = surgeHere.elev, d = Math.round((surgeH - e) * 10) / 10;
+        here = e < surgeH
+          ? `<p class="bm-explain bm-advice"><b>Your location is about ${e} m above sea level.</b> At a ${surgeH} m surge it would be under about ${d} m of water. Move to higher ground early.</p>`
+          : `<p class="bm-explain"><b>Your location is about ${e} m above sea level</b>, higher than a ${surgeH} m surge. Waves, tides and rivers can still flood nearby low ground.</p>`;
+      }
+      const surge = `<div class="bm-legend-title">Storm surge scenario: sea rise above normal tide</div>
+        <div class="bm-chips bm-toggles" role="group" aria-label="Storm surge height">${heights}</div>
+        <ul class="bm-steps">
+          <li><i style="background:rgba(120,215,250,.7)"></i>Under 0.5 m deep</li>
+          <li><i style="background:rgba(40,160,240,.75)"></i>0.5\u20131.5 m</li>
+          <li><i style="background:rgba(30,90,220,.8)"></i>1.5\u20133 m</li>
+          <li><i style="background:rgba(10,30,120,.85)"></i>Over 3 m</li>
+        </ul>
+        <p class="bm-explain">Shaded ground is lower than ${surgeH} m. Use the height in the PAGASA storm surge warning for your coast. For scale, Typhoon Haiyan (Yolanda, 2013) pushed surges of several metres onto Leyte Gulf coasts.${map.getZoom() < 9 ? ' <b>Zoom in to see the shading.</b>' : ''}</p>
+        ${here}`;
+
+      const body = `${signal}${surge}${hazardActions()}
+        <p class="bm-foot">Surge shading uses ground height only. It ignores waves, tides, rivers and sea walls, and low spots far from the sea may stay dry. Signal estimates come from a weather model that often under-reads typhoons, so they are not official. Follow <a href="https://www.pagasa.dost.gov.ph" target="_blank" rel="noopener">PAGASA</a> and your local DRRMO.</p>`;
+      setSheet(head, body);
+    }
+
     function landslideSheet() {
       const w = outlook && outlook.weather;
       const head = `<span class="bm-title"><i class="bm-dot slide"></i>Landslide risk ${w ? badge(w.landslide.level, w.landslide.label + ' rain trigger') : ''}</span>
@@ -1658,6 +1794,7 @@ const BayanihanMaps = (() => {
       else if (mode === 'route') routeSheet();
       else if (mode === 'weather') weatherSheet();
       else if (mode === 'flood') floodSheet();
+      else if (mode === 'surge') surgeSheet();
       else if (mode === 'landslide') landslideSheet();
       else if (mode === 'none' && baseName === 'topo') topoSheet();
       else hideSheet();
@@ -1677,6 +1814,10 @@ const BayanihanMaps = (() => {
         await Promise.all([loadWater(force, stale), loadLive(stale)]);
       } else if (mode === 'landslide') {
         await loadLive(stale);
+      } else if (mode === 'surge') {
+        extras.surge.waterLevel = surgeH;
+        await Promise.all([loadTyphoon(), loadSurgeHere()]);
+        if (!stale()) renderSheet();
       } else if (mode === 'reports') {
         // Reports shows only reports: drop any flood meters / simulated pins left from another layer
         if (live.gauges.length || live.slides.length) { live = { gauges: [], slides: [], sig: '' }; drawLive(); }
@@ -1710,6 +1851,8 @@ const BayanihanMaps = (() => {
       if (act === 'toggle') { sheetCollapsed = !sheetCollapsed; sheet.classList.toggle('is-collapsed', sheetCollapsed); t.setAttribute('aria-expanded', String(!sheetCollapsed)); }
       else if (act === 'filter') { evacFilter = t.dataset.k; drawEvac(); renderSheet(); }
       else if (act === 'fitall') fitAllSites();
+      else if (act === 'surgeh') setSurgeHeight(+t.dataset.h);
+      else if (act === 'tcws') { setManualSignal(+t.dataset.k); renderSheet(); }
       else if (act === 'floodopt') { floodShow[t.dataset.k] = !floodShow[t.dataset.k]; applyLayers(); renderSheet(); }
       else if (act === 'repfilter') { repFilter = t.dataset.k; renderSheet(); }
       else if (act === 'item') focusItem(t.dataset.id);
@@ -2034,7 +2177,7 @@ const BayanihanMaps = (() => {
     // Landslide add the matching reports from the Emergencies tab.
     function reportVisible(inc) {
       if (inc.source === 'mine' || mode === 'reports') return true;
-      if (mode === 'flood') return inc.type === 'Flood';
+      if (mode === 'flood' || mode === 'surge') return inc.type === 'Flood';
       if (mode === 'landslide') return inc.type === 'Landslide';
       return false;
     }
@@ -2361,6 +2504,7 @@ const BayanihanMaps = (() => {
         if (demo) demoRun++;
         demoPill.hidden = !demo;
         outlook = null;
+        typhoon = null;
         live = { gauges: [], slides: [], sig: '' };
         drawLive();
         if (demo && !user) info('Demo storm on. Turn on location so the alert can find you.', 'warn');

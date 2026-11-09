@@ -45,3 +45,13 @@ Accounts are stored in this browser (passwords salted and hashed with SHA-256), 
     node tools/build-evac-backup.js --bbox 14.60,121.07,14.70,121.13 --name "My barangay"
 
 The script is set up for Samar (Balangiga, Borongan, Guiuan, Oras, Dolores, Basey, Marabut, Catbalogan, Calbayog). Add more towns to the `AREAS` list at the top. Sites from the backup are marked as possibly out of date.
+
+## Storm Surge and typhoon signal (Maps tab, Storm Surge layer)
+- **Typhoon wind signal**: shows PAGASA's 5-level wind signal. You can tap the official signal announced for your area (kept 18 h, then it expires), and the app also **estimates** a signal from the next 48 h of Open-Meteo wind forecasts using PAGASA's wind speeds and lead times. Model winds often under-read typhoons, so the estimate is a rough guide only. With no signal the last saved forecast is shown and marked as old.
+- **Storm surge scenario**: pick 1 to 5 m and all ground lower than that height is shaded by depth (from the same elevation tiles as the Flood layer), with a line saying whether your own location would be under water. It uses ground height only: no waves, tides, rivers or sea walls, and low spots far from the sea may stay dry. Use the height from the PAGASA storm surge warning for your coast.
+- The Demo storm toggle also forces a Signal No. 3 estimate.
+
+## Recovery (Home > "After the storm?")
+- **I'm Safe**: check in as safe / need help / at an evacuation site, with where you are (typed or GPS), how many people are with you and a note. "Need help" shows call buttons and a link to send an SOS report. Past check-ins are listed.
+- **Damage Report**: what was damaged (house, road, power, water, farm, boat, school), how bad, where, details and help needed (food, water, shelter materials, medical, cash/livelihood, debris clearing).
+- Everything is saved on the phone (`bm.checkins.v1`, `bm.damage.v1`) and works offline. **Text it** opens the phone's messaging app with the message filled in (plain SMS, no internet), to a saved family / barangay number. Reports are not yet sent to a server, so responders only see what is texted to them.

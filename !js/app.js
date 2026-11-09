@@ -264,7 +264,7 @@
       type: 'Flood',
       title: 'Flooded Area',
       location: '6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar',
-      lat: 11.0967, lng: 125.3858, minsAgo: 42,
+      lat: 11.1140, lng: 125.3830, minsAgo: 42,
       reporter: 'Resident, Balangiga', contact: '+63 917 555 0142',
       desc: 'A severe flooding incident has been reported in this area. Rising water levels have affected nearby homes and roads, posing risks to residents and travelers. Emergency services are urgently needed to assist with evacuation, provide medical aid, and ensure public safety.',
       images: ['!assets/!images/flood-rescue-1.png', '!assets/!images/flood-rescue-2.png'],
@@ -621,6 +621,223 @@
       saveHotlines(); hotlineEdit = null; renderHotlines();
     }
   });
+  /* ------------------- RECOVERY: I'M SAFE CHECK-IN + DAMAGE REPORTS ------------------- */
+  // Everything is kept on this phone and works with no signal. "Text it" opens the phone's
+  // messaging app with the message filled in, so it can go out over plain SMS.
+  const CHECKIN_KEY = 'bm.checkins.v1';
+  const DAMAGE_KEY = 'bm.damage.v1';
+  const RC_CONTACT_KEY = 'bm.rc.contact.v1';
+  const RC_STATUS = {
+    safe: { label: "I'm safe", text: 'I am SAFE', cls: 'is-safe' },
+    help: { label: 'I need help', text: 'I NEED HELP', cls: 'is-help' },
+    evac: { label: 'At an evacuation site', text: 'I am SAFE at an evacuation site', cls: 'is-evac' },
+  };
+  const DMG_TYPES = ['House', 'Road or bridge', 'Electricity', 'Water supply', 'Farm or crops', 'Boat or fishing gear', 'School or public building', 'Other'];
+  const DMG_SEV = ['Minor', 'Major', 'Destroyed'];
+  const DMG_NEEDS = ['Food', 'Drinking water', 'Shelter materials', 'Medical help', 'Cash or livelihood aid', 'Clearing debris'];
+  const rc = {
+    seg: 'safe',
+    safe: { status: 'safe', lat: null, lng: null },
+    dmg: { type: '', sev: '', needs: [], lat: null, lng: null },
+    msg: '',
+  };
+  const rcName = () => (document.getElementById('home-username') || {}).textContent || 'A resident';
+  const mapLink = (lat, lng) => (lat != null ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=17/${lat}/${lng}` : '');
+  const rcClock = (t) => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  function sendText(message, number) {
+    const num = String(number || '').replace(/[^\d+]/g, '');
+    if (num) { window.location.href = 'sms:' + num + (isiOS ? '&' : '?') + 'body=' + encodeURIComponent(message); return; }
+    if (navigator.share) { navigator.share({ text: message }).catch(() => {}); return; }
+    window.location.href = 'sms:' + (isiOS ? '&' : '?') + 'body=' + encodeURIComponent(message);
+  }
+  const checkinText = (e) => [
+    `${rcName()}: ${RC_STATUS[e.status].text}.`,
+    e.where ? `Where: ${e.where}.` : '',
+    e.people ? `People with me: ${e.people}.` : '',
+    e.note ? e.note : '',
+    mapLink(e.lat, e.lng),
+    `Sent ${rcClock(e.time)} via Bayanihan Ready`,
+  ].filter(Boolean).join(' ');
+  const damageText = (r) => [
+    `DAMAGE REPORT from ${rcName()}: ${r.type}, ${r.sev.toLowerCase()}.`,
+    r.where ? `Where: ${r.where}.` : '',
+    r.desc ? `Details: ${r.desc}.` : '',
+    r.needs.length ? `Needs: ${r.needs.join(', ')}.` : '',
+    r.contact ? `Contact: ${r.contact}.` : '',
+    mapLink(r.lat, r.lng),
+    `Sent ${rcClock(r.time)} via Bayanihan Ready`,
+  ].filter(Boolean).join(' ');
+
+  const chips = (list, sel, act, multi) => `<div class="rc-chips" data-multi="${multi ? 1 : 0}">${list.map((x) =>
+    `<button type="button" class="rc-chip ${(multi ? sel.includes(x) : sel === x) ? 'is-on' : ''}" data-rc="${act}" data-v="${escH(x)}" aria-pressed="${multi ? sel.includes(x) : sel === x}">${escH(x)}</button>`).join('')}</div>`;
+
+  function whereBlock(prefix, d) {
+    return `<p class="rc-label">Where are you?</p>
+      <div class="input-card-box"><input type="text" id="${prefix}-where" placeholder="Barangay, purok, landmark or evacuation site" value="${escH(d.where || '')}"></div>
+      <button type="button" class="rc-link" data-rc="gps" data-p="${prefix}">${d.lat != null ? 'Location saved. Update it' : 'Use my GPS location'}</button>`;
+  }
+  const contactBlock = (id, label) => `<p class="rc-label">${label}</p>
+      <div class="input-card-box"><input type="tel" id="${id}" inputmode="tel" placeholder="Mobile number" value="${escH(lsGet(RC_CONTACT_KEY, ''))}"></div>`;
+
+  function renderSafe() {
+    const list = lsGet(CHECKIN_KEY, []);
+    const last = list[0];
+    const d = rc.safe;
+    let latest = '';
+    if (last) {
+      const st = RC_STATUS[last.status];
+      latest = `<div class="rc-latest ${st.cls}"><b>${escH(st.label)}</b><span>${escH(ago(last.time))}${last.where ? ' \u00b7 ' + escH(last.where) : ''}</span></div>`;
+    }
+    const helpBox = (last && last.status === 'help') || d.status === 'help'
+      ? `<div class="rc-alert"><b>If you are in danger, call now.</b>
+          <div class="rsp-hotlines">${HOTLINES.filter((h) => h.types.includes('all')).slice(0, 2).map((h) => `<div class="rsp-row"><div><b>${escH(h.name)}</b><span>${escH(h.number)}</span></div>${callBtn(h.number)}</div>`).join('')}</div>
+          <button type="button" class="btn-primary-red" data-goto="report-emergency">Send an SOS report</button></div>` : '';
+    const hist = list.slice(0, 5).map((e) => `<div class="rc-item"><div><b>${escH(RC_STATUS[e.status].label)}</b><span>${escH(rcClock(e.time))}${e.where ? ' \u00b7 ' + escH(e.where) : ''}${e.people ? ' \u00b7 ' + e.people + ' people' : ''}</span></div>
+        <span class="rc-item-actions"><button type="button" class="rc-link" data-rc="send-checkin" data-id="${escH(e.id)}">Text</button><button type="button" class="rc-link is-danger" data-rc="del-checkin" data-id="${escH(e.id)}">Delete</button></span></div>`).join('');
+    document.getElementById('recovery-body').innerHTML = `
+      ${latest}
+      <p class="rc-lead">Let your family and barangay know how you are. It saves on this phone and can be sent by text, with no internet needed.</p>
+      <p class="rc-label">How are you?</p>
+      <div class="rc-chips">${Object.entries(RC_STATUS).map(([k, v]) => `<button type="button" class="rc-chip big ${v.cls} ${d.status === k ? 'is-on' : ''}" data-rc="status" data-v="${k}" aria-pressed="${d.status === k}">${escH(v.label)}</button>`).join('')}</div>
+      <div id="rc-help-slot">${helpBox}</div>
+      ${whereBlock('rcs', d)}
+      <p class="rc-label">People with you (including you)</p>
+      <div class="input-card-box"><input type="number" id="rcs-people" min="1" max="99" inputmode="numeric" value="${escH(d.people || 1)}"></div>
+      <p class="rc-label">Note (optional)</p>
+      <div class="input-card-box"><input type="text" id="rcs-note" placeholder="e.g. House flooded, staying with relatives" value="${escH(d.note || '')}"></div>
+      ${contactBlock('rcs-contact', 'Text to (family or barangay number)')}
+      <p class="form-error" id="rc-error" ${rc.msg ? '' : 'hidden'}>${escH(rc.msg)}</p>
+      <button type="button" class="btn-primary-red" data-rc="save-safe">Save check-in</button>
+      <button type="button" class="rc-secondary" data-rc="send-safe">Save and text it</button>
+      ${hist ? `<p class="rc-label">Recent check-ins</p>${hist}` : ''}`;
+  }
+
+  function renderDamage() {
+    const list = lsGet(DAMAGE_KEY, []);
+    const d = rc.dmg;
+    const items = list.map((r) => `<div class="rc-item"><div><b>${escH(r.type)} \u00b7 ${escH(r.sev)}</b><span>${escH(rcClock(r.time))}${r.where ? ' \u00b7 ' + escH(r.where) : ''}${r.needs.length ? '<br>Needs: ' + escH(r.needs.join(', ')) : ''}${r.desc ? '<br>' + escH(r.desc) : ''}</span></div>
+        <span class="rc-item-actions"><button type="button" class="rc-link" data-rc="send-dmg" data-id="${escH(r.id)}">Text</button><button type="button" class="rc-link is-danger" data-rc="del-dmg" data-id="${escH(r.id)}">Delete</button></span></div>`).join('');
+    document.getElementById('recovery-body').innerHTML = `
+      <p class="rc-lead">Record damage to your home, farm, boat or community so help and relief can be planned. Reports stay on this phone until you text them to your barangay or MDRRMO.</p>
+      <p class="rc-label">What was damaged?</p>
+      ${chips(DMG_TYPES, d.type, 'dtype', false)}
+      <p class="rc-label">How bad is it?</p>
+      ${chips(DMG_SEV, d.sev, 'sev', false)}
+      ${whereBlock('rcd', d)}
+      <p class="rc-label">What happened? (optional)</p>
+      <div class="input-card-box"><textarea id="rcd-desc" rows="3" placeholder="e.g. Roof blown off, floodwater reached 1 m inside">${escH(d.desc || '')}</textarea></div>
+      <p class="rc-label">Help needed (tap all that apply)</p>
+      ${chips(DMG_NEEDS, d.needs, 'need', true)}
+      ${contactBlock('rcd-contact', 'Contact number')}
+      <p class="form-error" id="rc-error" ${rc.msg ? '' : 'hidden'}>${escH(rc.msg)}</p>
+      <button type="button" class="btn-primary-red" data-rc="save-dmg">Save damage report</button>
+      <button type="button" class="rc-secondary" data-rc="send-dmg-new">Save and text to barangay</button>
+      ${items ? `<p class="rc-label">Saved reports (${list.length})</p>${items}` : ''}`;
+  }
+
+  function renderRecovery() {
+    document.querySelectorAll('#recovery-segment .segment-btn').forEach((b) => b.classList.toggle('is-active', b.dataset.seg === rc.seg));
+    (rc.seg === 'safe' ? renderSafe : renderDamage)();
+  }
+
+  // pull what is typed in the form into the draft so nothing is lost on a redraw
+  function rcReadForm() {
+    const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    if (rc.seg === 'safe') {
+      Object.assign(rc.safe, { where: v('rcs-where'), people: Math.max(1, parseInt(v('rcs-people'), 10) || 1), note: v('rcs-note') });
+    } else {
+      Object.assign(rc.dmg, { where: v('rcd-where'), desc: v('rcd-desc') });
+    }
+    const c = v(rc.seg === 'safe' ? 'rcs-contact' : 'rcd-contact');
+    if (c) lsSet(RC_CONTACT_KEY, c);
+    return c;
+  }
+
+  function rcSaveSafe() {
+    const contact = rcReadForm();
+    const d = rc.safe;
+    const entry = { id: 'c' + Date.now().toString(36), status: d.status, where: d.where, people: d.people, note: d.note, lat: d.lat, lng: d.lng, time: Date.now() };
+    const list = lsGet(CHECKIN_KEY, []);
+    list.unshift(entry);
+    lsSet(CHECKIN_KEY, list.slice(0, 30));
+    return { entry, contact };
+  }
+  function rcSaveDamage() {
+    const contact = rcReadForm();
+    const d = rc.dmg;
+    if (!d.type) { rc.msg = 'Choose what was damaged.'; return null; }
+    if (!d.sev) { rc.msg = 'Choose how bad the damage is.'; return null; }
+    if (!d.where && d.lat == null) { rc.msg = 'Say where the damage is, or use your GPS location.'; return null; }
+    rc.msg = '';
+    const rep = { id: 'd' + Date.now().toString(36), type: d.type, sev: d.sev, where: d.where || '', desc: d.desc || '', needs: d.needs.slice(), contact, lat: d.lat, lng: d.lng, time: Date.now() };
+    const list = lsGet(DAMAGE_KEY, []);
+    list.unshift(rep);
+    lsSet(DAMAGE_KEY, list.slice(0, 100));
+    rc.dmg = { type: '', sev: '', needs: [], lat: null, lng: null };   // fresh form for the next report
+    return { rep, contact };
+  }
+
+  document.getElementById('recovery-segment').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-seg]');
+    if (!b) return;
+    rcReadForm();
+    rc.seg = b.dataset.seg; rc.msg = '';
+    renderRecovery();
+  });
+
+  document.getElementById('recovery-body').addEventListener('click', (e) => {
+    const go = e.target.closest('[data-goto]');          // buttons drawn after load (e.g. Send an SOS report)
+    if (go) { e.preventDefault(); showScreen(go.dataset.goto); return; }
+    const b = e.target.closest('[data-rc]');
+    if (!b) return;
+    const act = b.dataset.rc, v = b.dataset.v, id = b.dataset.id;
+    if (act === 'status') {
+      rcReadForm(); rc.safe.status = v; renderSafe();
+    } else if (act === 'dtype' || act === 'sev') {
+      rcReadForm(); rc.dmg[act === 'dtype' ? 'type' : 'sev'] = v; rc.msg = ''; renderDamage();
+    } else if (act === 'need') {
+      rcReadForm();
+      const n = rc.dmg.needs; const k = n.indexOf(v);
+      if (k >= 0) n.splice(k, 1); else n.push(v);
+      renderDamage();
+    } else if (act === 'gps') {
+      rcReadForm();
+      const target = b.dataset.p === 'rcs' ? rc.safe : rc.dmg;
+      if (!navigator.geolocation) { rc.msg = 'This phone cannot share its location here. Type where you are instead.'; rc.seg === 'safe' ? renderSafe() : renderDamage(); return; }
+      b.textContent = 'Finding your location\u2026';
+      navigator.geolocation.getCurrentPosition((pos) => {
+        target.lat = +pos.coords.latitude.toFixed(5); target.lng = +pos.coords.longitude.toFixed(5);
+        if (!target.where) target.where = `GPS ${target.lat}, ${target.lng}`;
+        rc.msg = ''; rc.seg === 'safe' ? renderSafe() : renderDamage();
+      }, () => {
+        rc.msg = 'Could not get your location. Allow location access or type where you are.';
+        rc.seg === 'safe' ? renderSafe() : renderDamage();
+      }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
+    } else if (act === 'save-safe' || act === 'send-safe') {
+      const r = rcSaveSafe();
+      rc.msg = '';
+      renderSafe();
+      if (act === 'send-safe') sendText(checkinText(r.entry), r.contact);
+    } else if (act === 'save-dmg' || act === 'send-dmg-new') {
+      const r = rcSaveDamage();
+      renderDamage();
+      if (r && act === 'send-dmg-new') sendText(damageText(r.rep), r.contact);
+    } else if (act === 'send-checkin') {
+      const en = lsGet(CHECKIN_KEY, []).find((x) => x.id === id);
+      if (en) sendText(checkinText(en), lsGet(RC_CONTACT_KEY, ''));
+    } else if (act === 'send-dmg') {
+      const r = lsGet(DAMAGE_KEY, []).find((x) => x.id === id);
+      if (r) sendText(damageText(r), r.contact || lsGet(RC_CONTACT_KEY, ''));
+    } else if (act === 'del-checkin') {
+      if (confirm('Delete this check-in?')) { lsSet(CHECKIN_KEY, lsGet(CHECKIN_KEY, []).filter((x) => x.id !== id)); renderSafe(); }
+    } else if (act === 'del-dmg') {
+      if (confirm('Delete this damage report?')) { lsSet(DAMAGE_KEY, lsGet(DAMAGE_KEY, []).filter((x) => x.id !== id)); renderDamage(); }
+    }
+  });
+  document.querySelectorAll('[data-goto="recovery"]').forEach((el) => el.addEventListener('click', () => { rc.msg = ''; renderRecovery(); }));
+
   renderHotlines();
 
   function openEmergencyDetail(id) {
@@ -1684,7 +1901,7 @@
     if (demoToggle) demoToggle.addEventListener('change', () => {
       if (!mainMap) return;
       mainMap.setDemo(demoToggle.checked);
-      if (demoToggle.checked && !['flood', 'landslide'].includes(mainMap.getMode())) mainMap.setMode('flood');   // alerts fire on the Flood / Landslide maps
+      if (demoToggle.checked && !['flood', 'landslide', 'surge'].includes(mainMap.getMode())) mainMap.setMode('flood');   // alerts fire on the Flood / Landslide maps
       closeBase();
     });
     ovlOpts.forEach((b) => b.addEventListener('click', () => {
