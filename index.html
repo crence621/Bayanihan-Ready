@@ -286,7 +286,10 @@
             <svg viewBox="0 0 20 20" fill="none"><path d="M10 3v14M3 10h14" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
           </button>
 
-          <button class="btn-community-mode" id="btn-community-mode" type="button">Community Mode</button>
+          <div class="rsp-actions">
+            <button class="rsp-hotline-btn" type="button" data-goto="hotlines">Hotlines</button>
+            <button class="btn-community-mode" id="btn-community-mode" type="button">Community Mode</button>
+          </div>
         </div>
       </div>
 
@@ -871,6 +874,9 @@
         <div class="input-card-box" style="margin-top: 4px;">
           <input type="text" id="report-notes" placeholder="Specify emergency in brief...">
         </div>
+        <div class="input-card-box" style="margin-top: 8px;">
+          <input type="tel" id="report-contact" placeholder="Your contact no. (responders may call you)" autocomplete="tel" inputmode="tel">
+        </div>
 
         <button type="button" class="btn-primary-red" id="btn-submit-report">Submit Report</button>
       </div>
@@ -1107,6 +1113,25 @@
               <span class="switch-slider"></span>
             </label>
           </div>
+          <div class="menu-row">
+            <span>Responder mode</span>
+            <label class="switch">
+              <input type="checkbox" id="settings-responder">
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="rsp-resp-fields" id="responder-fields" hidden>
+            <p class="rsp-hint">Responders can reply to emergencies. Reporters see this name, agency and number.</p>
+            <div class="input-card-box"><input type="text" id="responder-name" placeholder="Your name" autocomplete="name"></div>
+            <div class="input-card-box"><input type="text" id="responder-agency" placeholder="Agency / unit (e.g. Barangay DRRMO)"></div>
+            <div class="input-card-box"><input type="tel" id="responder-contact" placeholder="Contact no." inputmode="tel" autocomplete="tel"></div>
+            <p class="form-error" id="responder-error" hidden></p>
+            <button type="button" class="btn-primary-red" id="responder-save">Save responder details</button>
+          </div>
+          <button class="menu-row" type="button" data-goto="hotlines">
+            <span>Emergency hotlines</span>
+            <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <button class="menu-row" type="button" data-settings-alert="Language">
             <span>Language</span>
             <svg class="chev" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1140,6 +1165,30 @@
     </div>
   </section>
 
+  <!-- HOTLINES -->
+  <section class="screen" data-screen="hotlines">
+    <div class="dev-tag">Hotlines</div>
+    <div class="card">
+      <div class="status-bar">
+        <span>9:41</span>
+        <span class="status-icons">
+          <svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="7" width="3" height="5"/><rect x="5" y="5" width="3" height="7"/><rect x="10" y="2" width="3" height="10"/><rect x="15" y="0" width="3" height="12"/></svg>
+          <svg width="15" height="12" viewBox="0 0 15 12"><path d="M7.5 12 0 4.5C4 .5 11 .5 15 4.5Z"/></svg>
+          <svg width="24" height="12" viewBox="0 0 24 12"><rect x="0" y="0" width="21" height="12" rx="2.5" fill="none" stroke="currentColor"/><rect x="1.5" y="1.5" width="16" height="9" rx="1"/><rect x="22" y="4" width="2" height="4" rx="1"/></svg>
+        </span>
+      </div>
+
+      <div class="report-header">
+        <button class="back-btn" id="hotlines-back-btn" aria-label="Back">←</button>
+        <h2>Emergency Hotlines</h2>
+      </div>
+      <div class="settings-body">
+        <div class="rsp-hotlines" id="hotline-list"></div>
+        <p class="rsp-hint" id="hotline-note"></p>
+      </div>
+    </div>
+  </section>
+
   <!-- SCREEN 12 — EMERGENCY DETAIL -->
   <section class="screen" data-screen="emergency-detail">
     <div class="dev-tag">View Emergency</div>
@@ -1169,6 +1218,26 @@
         </div>
 
         <button type="button" class="detail-map-btn" id="detail-map-btn" hidden>View on map</button>
+
+        <div class="rsp-block" id="detail-response"></div>
+
+        <p class="section-title">Contact &amp; hotline</p>
+        <div class="rsp-block" id="detail-contact"></div>
+
+        <button type="button" class="btn-primary-red rsp-respond-btn" id="detail-respond-btn" hidden>Respond to this emergency</button>
+        <div class="rsp-form" id="respond-form" hidden>
+          <p class="rsp-form-title">Update your response</p>
+          <div class="rsp-steps" id="respond-steps">
+            <button type="button" class="rsp-step is-active" data-status="acknowledged">Acknowledge</button>
+            <button type="button" class="rsp-step" data-status="enroute">On the way</button>
+            <button type="button" class="rsp-step" data-status="onscene">On scene</button>
+            <button type="button" class="rsp-step" data-status="resolved">Resolved</button>
+          </div>
+          <div class="input-card-box" id="respond-eta-box"><input type="number" id="respond-eta" min="1" max="600" placeholder="Estimated arrival (minutes)" inputmode="numeric"></div>
+          <div class="input-card-box"><input type="text" id="respond-note" placeholder="Note for the reporter (optional)"></div>
+          <p class="form-error" id="respond-error" hidden></p>
+          <button type="button" class="btn-primary-red" id="respond-send">Send response</button>
+        </div>
 
         <p class="section-title">Description</p>
         <p class="detail-desc" id="detail-desc"></p>

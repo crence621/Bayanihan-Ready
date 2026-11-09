@@ -766,34 +766,66 @@ const BayanihanAPI = (() => {
       const centers = b.sites.filter((s) => inBox(s, box)).map((s) => ({ outline: null, facilities: {}, ...s, fromBackup: true }));
       return centers.length ? { success: true, centers, stale: true, backup: true, updatedAt: b.generated ? Date.parse(b.generated) : null } : null;
     };
+    const hasBackup = () => { const b = window.BAYANIHAN_EVAC_BACKUP; return !!(b && Array.isArray(b.sites) && b.sites.length); };
+    const bad = (box) => backupFor(box);
+    const rad = (d) => d * Math.PI / 180;
+    // nearest saved site to a point (used to offer "Show saved sites" when the view is outside the saved areas)
+    api.nearestBackupSite = (lat, lng) => {
+      if (!hasBackup()) return null;
+      let best = null;
+      window.BAYANIHAN_EVAC_BACKUP.sites.forEach((s) => {
+        const d = Math.hypot((s.lat - lat), (s.lng - lng) * Math.cos(rad(lat)));
+        if (!best || d < best.d) best = { d, site: s };
+      });
+      return best ? { lat: best.site.lat, lng: best.site.lng, name: best.site.name, km: best.d * 111 } : null;
+    };
+    api.getBackupInfo = () => hasBackup() ? { count: window.BAYANIHAN_EVAC_BACKUP.sites.length, generated: window.BAYANIHAN_EVAC_BACKUP.generated } : null;
+
+    // The built-in list is the PRIMARY source: it answers instantly, with or without signal.
+    // The live search only runs when (a) the saved list has nothing for this view, or
+    // (even Redo search and the hourly refresh stay on the saved list when it has sites).
     api.getEvacuationCenters = async (box, opts = {}) => {
+      const bk = bad(box);
+      if (bk) return { ...bk, stale: false, primary: true };   // saved sites exist: never go online
+      // Saved sites exist somewhere but not in this view: stay on the saved list (no network).
+      // The live search runs only when there are no saved sites at all, or when asked with opts.online.
+      if (hasBackup() && !opts.online) return { success: true, centers: [], stale: false, primary: true, backupOutside: true };
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
       const c = readCache();
       c.evac = c.evac || [];
-      // 1) A saved search under an hour old that covers this view answers instantly.
+      const fromCache = () => {
+        const near = c.evac.filter((e) => e.box[0] < box.north && e.box[2] > box.south && e.box[1] < box.east && e.box[3] > box.west);
+        if (!near.length) return null;
+        const seen = new Set();
+        const centers = [];
+        near.forEach((e) => e.centers.forEach((s) => { if (inBox(s, box) && !seen.has(s.id)) { seen.add(s.id); centers.push(s); } }));
+        return centers.length ? { success: true, centers, stale: true, updatedAt: Math.min(...near.map((e) => e.t)) } : null;
+      };
+      // 1) A recent saved live search that covers this view answers instantly.
       if (!opts.fresh) {
         const hit = c.evac.find((e) => !e.partial && e.centers.length && Date.now() - e.t < 3600000 && e.box[0] <= box.south && e.box[1] <= box.west && e.box[2] >= box.north && e.box[3] >= box.east);
         if (hit) return { success: true, centers: hit.centers.filter((s) => inBox(s, box)), updatedAt: hit.t, stale: false, cached: true };
       }
+      // 2) No signal: do not wait for timeouts.
+      if (offline) return bk || fromCache() || { success: false, error: 'No signal and no saved sites for this area.', centers: [], offline: true };
+      // 3) Live search.
       const res = await orig(box, opts);
       if (res.cancelled) return res;
-      if (res && res.success && !res.centers.length) return backupFor(box) || res;   // empty is often a timeout
-      if (res && res.success) {
+      if (res && res.success && res.centers.length) {
         const now = Date.now();
-        if (!res.partial && res.centers.length) {        // an empty answer is often a timeout: never save it
-          c.evac = c.evac.filter((e) => !(e.box[0] >= box.south && e.box[1] >= box.west && e.box[2] <= box.north && e.box[3] <= box.east));   // replaces smaller older searches
+        if (!res.partial) {
+          c.evac = c.evac.filter((e) => !(e.box[0] >= box.south && e.box[1] >= box.west && e.box[2] <= box.north && e.box[3] <= box.east));
           c.evac.push({ t: now, box: [box.south, box.west, box.north, box.east], centers: res.centers });
           c.evac = c.evac.slice(-6);
           writeCache(c);
         }
-        return { ...res, updatedAt: now, stale: false };
+        // add saved sites the live search did not return
+        const have = new Set(res.centers.map((s) => s.id));
+        const extra = bk ? bk.centers.filter((s) => !have.has(s.id)) : [];
+        return { ...res, centers: res.centers.concat(extra), updatedAt: now, stale: false };
       }
-      // 2) Network failed: rebuild from every saved area that overlaps this view, however old.
-      const near = c.evac.filter((e) => e.box[0] < box.north && e.box[2] > box.south && e.box[1] < box.east && e.box[3] > box.west);
-      if (!near.length) return backupFor(box) || res;
-      const seen = new Set();
-      const centers = [];
-      near.forEach((e) => e.centers.forEach((s) => { if (!seen.has(s.id)) { seen.add(s.id); centers.push(s); } }));
-      return { success: true, centers, stale: true, updatedAt: Math.min(...near.map((e) => e.t)) };
+      // live search failed or was empty: saved sites, then older live copies
+      return bk || fromCache() || res;
     };
   }
 

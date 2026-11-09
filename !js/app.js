@@ -265,6 +265,7 @@
       title: 'Flooded Area',
       location: '6767, Buenavista-Lawaan Rd., Balangiga, Eastern Samar',
       lat: 11.0967, lng: 125.3858, minsAgo: 42,
+      reporter: 'Resident, Balangiga', contact: '+63 917 555 0142',
       desc: 'A severe flooding incident has been reported in this area. Rising water levels have affected nearby homes and roads, posing risks to residents and travelers. Emergency services are urgently needed to assist with evacuation, provide medical aid, and ensure public safety.',
       images: ['!assets/!images/flood-rescue-1.png', '!assets/!images/flood-rescue-2.png'],
       // No sample audio file ships with this seed post yet — leave empty
@@ -278,6 +279,7 @@
       title: 'Medical Emergency',
       location: 'Brgy. San Miguel, Basey City, Eastern Samar',
       lat: 11.2822, lng: 125.0689, minsAgo: 130,
+      reporter: 'Resident, Basey', contact: '+63 917 555 0178',
       desc: 'A critical medical situation has been reported in this area. A resident is experiencing severe health complications and requires immediate assistance.',
       images: [],
       audios: [],
@@ -324,6 +326,7 @@
         </div>
         <span class="ec-icon-badge"><img src="${typeIconPath(item.type)}" alt=""></span>
         <p class="ec-title">${item.title}</p>
+        ${statusChip(item.id)}
         <p class="ec-desc">${item.desc}</p>
       </div>`
       )
@@ -415,6 +418,164 @@
   const detailAudioTime = document.getElementById('detail-audio-time');
   wireAudioButton(detailAudioBtn, detailAudioEl, detailAudioTime);
 
+  /* ------------------- HOTLINES, CONTACT NO. AND RESPONDER REPLIES ------------------- */
+  // National hotlines. Please verify these (and add your local DRRMO / MDRRMO numbers) before release.
+  const HOTLINES = [
+    { name: 'Emergency (police, fire, medical)', number: '911', desc: 'National emergency hotline', types: ['all'] },
+    { name: 'Philippine National Police', number: '117', desc: 'Crime, robbery, assault', types: ['Robbery', 'Assault', 'Accident'] },
+    { name: 'Bureau of Fire Protection', number: '(02) 8426-0219', desc: 'Fires and rescue', types: ['Fire'] },
+    { name: 'Philippine Red Cross', number: '143', desc: 'Medical help, rescue, relief', types: ['Medical', 'Flood', 'Quake', 'Landslide', 'Accident'] },
+    { name: 'NDRRMC Operations Center', number: '(02) 8911-1406', desc: 'Floods, landslides, earthquakes', types: ['Flood', 'Landslide', 'Quake'] },
+    { name: 'DOH Health Emergency', number: '1555', desc: 'Health concerns and advice', types: ['Medical'] },
+  ];
+  const LOCAL_KEY = 'bm.localHotline.v1';
+  const tel = (n) => 'tel:' + String(n).replace(/[^\d+]/g, '');
+  const escH = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked */ } };
+  const callBtn = (n, label) => `<a class="rsp-call" href="${tel(n)}" aria-label="Call ${escH(n)}"><svg viewBox="0 0 20 20" fill="none"><path d="M5.2 2.8 3.4 4.6c-.6.6-.7 1.5-.3 2.2a15 15 0 0 0 6.1 6.1c.7.4 1.6.3 2.2-.3l1.8-1.8-2.9-1.9-1.3 1.3a10 10 0 0 1-3.5-3.5l1.3-1.3L5.2 2.8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>${escH(label || 'Call')}</a>`;
+  const hotlinesFor = (type) => HOTLINES.filter((h) => h.types.includes('all') || h.types.includes(type));
+
+  // Responder profile (this device) and replies posted to emergencies.
+  let responder = lsGet('bm.responder.v1', { on: false, name: '', agency: '', contact: '' });
+  let responses = lsGet('bm.responses.v1', {});
+  const STATUS = {
+    acknowledged: { label: 'Responder acknowledged', short: 'Acknowledged', cls: 'is-ack' },
+    enroute: { label: 'Responder on the way', short: 'On the way', cls: 'is-enroute' },
+    onscene: { label: 'Responder on scene', short: 'On scene', cls: 'is-onscene' },
+    resolved: { label: 'Resolved', short: 'Resolved', cls: 'is-resolved' },
+  };
+  const latestResponse = (id) => { const l = responses[id]; return l && l.length ? l[l.length - 1] : null; };
+  function statusChip(id) {
+    const r = latestResponse(id);
+    return r ? `<span class="rsp-chip ${STATUS[r.status].cls}">${STATUS[r.status].short} · ${escH(r.agency || r.name)}</span>` : '<span class="rsp-chip is-wait">Waiting for a responder</span>';
+  }
+  const ago = (t) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : Math.round(m / 60) + ' h ago'; };
+
+  function renderResponse(item) {
+    const box = document.getElementById('detail-response');
+    const list = responses[item.id] || [];
+    if (!list.length) {
+      box.innerHTML = '<div class="rsp-status is-wait"><b>Waiting for a responder</b><span>No responder has replied yet. If it is urgent, call a hotline below.</span></div>';
+      return;
+    }
+    const last = list[list.length - 1];
+    const eta = last.status === 'enroute' && last.eta ? ` · ETA about ${last.eta} min` : '';
+    box.innerHTML = `<div class="rsp-status ${STATUS[last.status].cls}"><b>${STATUS[last.status].label}${eta}</b>
+        <span>${escH(last.name)}${last.agency ? ' · ' + escH(last.agency) : ''}</span>
+        ${last.contact ? callBtn(last.contact, 'Call responder') : ''}</div>
+      <ol class="rsp-timeline">${list.slice().reverse().map((r) => `<li><b>${STATUS[r.status].short}</b> <i>${ago(r.t)}</i>${r.note ? `<p>${escH(r.note)}</p>` : ''}<small>${escH(r.name)}${r.agency ? ', ' + escH(r.agency) : ''}</small></li>`).join('')}</ol>`;
+  }
+
+  function renderContact(item) {
+    const box = document.getElementById('detail-contact');
+    const local = lsGet(LOCAL_KEY, null);
+    const rows = [];
+    if (item.contact) rows.push(`<div class="rsp-row"><div><b>${item.mine ? 'Your contact no.' : 'Reporter contact no.'}</b><span>${escH(item.contact)}${item.reporter && !item.mine ? ' · ' + escH(item.reporter) : ''}</span></div>${item.mine ? '' : callBtn(item.contact)}</div>`);
+    else rows.push('<div class="rsp-row"><div><b>Reporter contact no.</b><span>Not provided</span></div></div>');
+    hotlinesFor(item.type).forEach((h) => rows.push(`<div class="rsp-row"><div><b>${escH(h.name)}</b><span>Hotline ${escH(h.number)}</span></div>${callBtn(h.number)}</div>`));
+    if (local && local.number) rows.push(`<div class="rsp-row"><div><b>${escH(local.name || 'Local DRRMO')}</b><span>Hotline ${escH(local.number)}</span></div>${callBtn(local.number)}</div>`);
+    box.innerHTML = rows.join('');
+  }
+
+  let respondTarget = null, respondStatus = 'acknowledged';
+  function setRespondStatus(st) {
+    respondStatus = st;
+    document.querySelectorAll('#respond-steps .rsp-step').forEach((b) => b.classList.toggle('is-active', b.dataset.status === st));
+    document.getElementById('respond-eta-box').hidden = st !== 'enroute';
+  }
+  function renderRespondButton() {
+    const btn = document.getElementById('detail-respond-btn');
+    btn.hidden = !(responder.on && responder.name && respondTarget);
+    document.getElementById('respond-form').hidden = true;
+  }
+  function paintDetailExtras(item) {
+    respondTarget = item;
+    renderResponse(item);
+    renderContact(item);
+    renderRespondButton();
+  }
+
+  document.getElementById('detail-respond-btn').addEventListener('click', () => {
+    const f = document.getElementById('respond-form');
+    f.hidden = !f.hidden;
+    if (!f.hidden) { setRespondStatus('acknowledged'); document.getElementById('respond-error').hidden = true; f.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+  });
+  document.querySelectorAll('#respond-steps .rsp-step').forEach((b) => b.addEventListener('click', () => setRespondStatus(b.dataset.status)));
+  document.getElementById('respond-send').addEventListener('click', () => {
+    const item = respondTarget;
+    if (!item) return;
+    const err = document.getElementById('respond-error');
+    const eta = parseInt(document.getElementById('respond-eta').value, 10);
+    if (respondStatus === 'enroute' && !(eta > 0)) { err.textContent = 'Enter your estimated arrival time in minutes.'; err.hidden = false; return; }
+    err.hidden = true;
+    const entry = { t: Date.now(), status: respondStatus, name: responder.name, agency: responder.agency, contact: responder.contact,
+      eta: respondStatus === 'enroute' ? eta : null, note: document.getElementById('respond-note').value.trim() };
+    (responses[item.id] = responses[item.id] || []).push(entry);
+    lsSet('bm.responses.v1', responses);
+    document.getElementById('respond-note').value = '';
+    document.getElementById('respond-eta').value = '';
+    // the reporter gets a notification
+    if (item.mine) {
+      notifications.unshift({ icon: '!assets/!images/first-aid.png', title: STATUS[entry.status].label, body: `${entry.name}${entry.agency ? ', ' + entry.agency : ''}${entry.eta ? ` · ETA about ${entry.eta} min` : ''}`, emergencyId: item.id });
+      renderNotifications();
+      if (bellDot) bellDot.style.display = 'block';
+    }
+    paintDetailExtras(item);
+    renderEmergencyFeed();
+  });
+
+  // Responder mode (Settings)
+  const respToggle = document.getElementById('settings-responder');
+  const respFields = document.getElementById('responder-fields');
+  function paintResponderSettings() {
+    respToggle.checked = !!responder.on;
+    respFields.hidden = !responder.on;
+    document.getElementById('responder-name').value = responder.name || '';
+    document.getElementById('responder-agency').value = responder.agency || '';
+    document.getElementById('responder-contact').value = responder.contact || '';
+  }
+  respToggle.addEventListener('change', () => {
+    responder.on = respToggle.checked;
+    respFields.hidden = !responder.on;
+    lsSet('bm.responder.v1', responder);
+  });
+  document.getElementById('responder-save').addEventListener('click', () => {
+    const err = document.getElementById('responder-error');
+    const name = document.getElementById('responder-name').value.trim();
+    const contact = document.getElementById('responder-contact').value.trim();
+    if (!name) { err.textContent = 'Enter your name.'; err.hidden = false; return; }
+    if (!/^[+\d][\d\s()-]{5,}$/.test(contact)) { err.textContent = 'Enter a valid contact number.'; err.hidden = false; return; }
+    err.hidden = true;
+    responder = { on: true, name, agency: document.getElementById('responder-agency').value.trim(), contact };
+    lsSet('bm.responder.v1', responder);
+    const b = document.getElementById('responder-save'); b.textContent = 'Saved ✓'; setTimeout(() => { b.textContent = 'Save responder details'; }, 1400);
+  });
+  paintResponderSettings();
+
+  // Hotlines screen
+  let hotlinesFrom = 'home';
+  document.querySelectorAll('[data-goto="hotlines"]').forEach((el) => el.addEventListener('click', () => {
+    const a = document.querySelector('.screen.is-active'); hotlinesFrom = a ? a.dataset.screen : 'home';
+    renderHotlines();
+  }, true));
+  document.getElementById('hotlines-back-btn').addEventListener('click', () => showScreen(hotlinesFrom === 'hotlines' ? 'home' : hotlinesFrom));
+  function renderHotlines() {
+    const local = lsGet(LOCAL_KEY, null);
+    document.getElementById('hotline-list').innerHTML =
+      HOTLINES.map((h) => `<div class="rsp-row"><div><b>${escH(h.name)}</b><span>${escH(h.number)} · ${escH(h.desc)}</span></div>${callBtn(h.number)}</div>`).join('') +
+      `<div class="rsp-local"><p class="rsp-form-title">Your local hotline (barangay / municipal DRRMO)</p>
+        <div class="input-card-box"><input type="text" id="local-hotline-name" placeholder="Name (e.g. Balangiga MDRRMO)" value="${escH(local && local.name)}"></div>
+        <div class="input-card-box"><input type="tel" id="local-hotline-number" placeholder="Number" inputmode="tel" value="${escH(local && local.number)}"></div>
+        <button type="button" class="btn-primary-red" id="local-hotline-save">Save local hotline</button></div>`;
+    document.getElementById('hotline-note').textContent = 'Tap Call to dial. Numbers can change, so please confirm local ones with your LGU.';
+    document.getElementById('local-hotline-save').addEventListener('click', () => {
+      lsSet(LOCAL_KEY, { name: document.getElementById('local-hotline-name').value.trim(), number: document.getElementById('local-hotline-number').value.trim() });
+      renderHotlines();
+    });
+  }
+  renderHotlines();
+
   function openEmergencyDetail(id) {
     const item = [...myEmergencies, ...othersEmergencies].find((i) => i.id === id);
     if (!item) return;
@@ -471,6 +632,7 @@
       mapBtn.dataset.id = item.id;
     }
 
+    paintDetailExtras(item);
     showScreen('emergency-detail');
   }
 
@@ -1267,6 +1429,9 @@
     }
 
     const notes = document.getElementById('report-notes').value.trim();
+    const contactEl = document.getElementById('report-contact');
+    const contact = (contactEl.value.trim() || (document.getElementById('account-mobile') || {}).value || '').trim();
+    const reporter = ((document.getElementById('account-name') || {}).value || '').trim();
     const { incident } = await BayanihanAPI.reportIncident({ ...coords, notes });
     submitBtn.disabled = false;
 
@@ -1284,7 +1449,7 @@
       title: TYPE_TITLES[type] || 'Emergency Reported',
       location: reportLocText.textContent,
       desc: notes || 'No additional details were provided for this report.',
-      lat: incident.lat, lng: incident.lng,
+      lat: incident.lat, lng: incident.lng, contact, reporter,
       images: proofItems.filter((p) => p.type === 'photo').map((p) => p.src),
       videos: proofItems.filter((p) => p.type === 'video').map((p) => p.src),
       audios,
@@ -1295,8 +1460,8 @@
 
     notifications.push({
       icon: '!assets/!images/first-aid.png',
-      title: 'Help is on Route',
-      body: 'Please Stay Safe',
+      title: 'Report sent',
+      body: 'Waiting for a responder to reply. You can call a hotline from the report.',
       emergencyId: incident.id,
     });
     renderNotifications();

@@ -974,10 +974,12 @@ const BayanihanMaps = (() => {
     }
 
     // name: a risk layer ('flood' ...), 'none' to clear it, or a base name (kept for older callers)
+    let evacJump = true;      // on opening the evacuation layer, move to the saved sites if none are in view
     function setMode(name) {
       if (BASE_ALIAS[name]) { setBase(name); return; }
       const def = MODES[name] || MODES.none;
       mode = MODES[name] ? name : 'none';
+      if (mode === 'evacuation' || mode === 'route') evacJump = true;
       applyLayers();
       drawReports();
       updateChip();
@@ -1129,7 +1131,7 @@ const BayanihanMaps = (() => {
         ? `<div class="bm-chips">${chips}<button type="button" class="bm-chip bm-chip-fit" data-act="fitall">Show all</button><button type="button" class="bm-chip bm-chip-fit" data-act="redoevac">Redo search</button></div>
            <div class="bm-scroll">${cards || '<p class="bm-empty">None of this type here.</p>'}</div>`
         : `<p class="bm-empty">${evacState.kind === 'busy' ? 'Searching\u2026' : 'No evacuation sites are mapped in this view yet. Pan, zoom out, or search again.'}</p>
-           <div class="bm-empty-btns">${evacState.kind === 'busy' ? '<button type="button" class="bm-btn" data-act="cancelevac">Cancel</button>' : '<button type="button" class="bm-btn bm-btn-green" data-act="redoevac">Search this area again</button>'}</div>`;
+           <div class="bm-empty-btns">${evacState.kind === 'busy' ? '<button type="button" class="bm-btn" data-act="cancelevac">Cancel</button>' : '<button type="button" class="bm-btn bm-btn-green" data-act="redoevac">Search this area again</button>' + (API.nearestBackupSite && API.nearestBackupSite(map.getCenter().lat, map.getCenter().lng) ? ' <button type="button" class="bm-btn" data-act="gobackup">Show saved sites</button>' : '')}</div>`;
       setSheet(head, body);
       const selCard = sheet.querySelector('.bm-card.is-sel');
       if (selCard) selCard.scrollIntoView({ block: 'nearest', inline: 'center' });
@@ -1151,12 +1153,21 @@ const BayanihanMaps = (() => {
       const relevant = mode === 'evacuation' || mode === 'route' || showEvac;
       const k = evacState.kind;
       if (!relevant || k === 'idle' || pick || detailId) { evacBar.hidden = true; return; }
-      const label = k === 'busy' ? 'Cancel' : k === 'failed' ? 'Try again' : 'Search again';
+      const label = k === 'busy' ? 'Cancel' : k === 'failed' ? 'Try again' : k === 'empty' && API.getBackupInfo && API.getBackupInfo() ? 'Search online' : 'Search again';
       evacBar.hidden = false;
       evacBar.className = 'bm-evacbar is-' + k;
-      evacBar.innerHTML = `<i></i><span>${esc(evacState.msg)}</span><button type="button" data-eb="${k === 'busy' ? 'cancel' : 'redo'}">${label}</button>`;
+      // when nothing is saved for this view but saved sites exist elsewhere, offer to jump there
+      const c0 = map.getCenter();
+      const near = k !== 'busy' && API.nearestBackupSite ? API.nearestBackupSite(c0.lat, c0.lng) : null;
+      const go = near && near.km > 1.5 && (k === 'failed' || k === 'empty') ? `<button type="button" data-eb="goto">Show saved sites (${near.km < 10 ? near.km.toFixed(1) : Math.round(near.km)} km away)</button>` : '';
+      evacBar.innerHTML = `<i></i><span>${esc(evacState.msg)}</span><button type="button" data-eb="${k === 'busy' ? 'cancel' : 'redo'}">${label}</button>${go}`;
     }
     function setEvacState(kind, msg = '') { evacState = { kind, msg }; paintEvacBar(); }
+    function gotoSaved() {
+      const c0 = map.getCenter();
+      const n = API.nearestBackupSite && API.nearestBackupSite(c0.lat, c0.lng);
+      if (n) map.setView([n.lat, n.lng], 14);
+    }
     function cancelEvac() { if (evacCtl) evacCtl.abort(); }
     function redoEvac() {
       evacFresh = true;
@@ -1166,7 +1177,9 @@ const BayanihanMaps = (() => {
     evacBar.addEventListener('click', (e) => {
       const b = e.target.closest('[data-eb]');
       if (!b) return;
-      if (b.dataset.eb === 'cancel') cancelEvac(); else redoEvac();
+      if (b.dataset.eb === 'cancel') cancelEvac();
+      else if (b.dataset.eb === 'goto') gotoSaved();
+      else redoEvac();
     });
 
     // quiet: loading them in the background under another layer, so no panel changes
@@ -1197,7 +1210,7 @@ const BayanihanMaps = (() => {
       };
       const res = await API.getEvacuationCenters(toBox(area), {
         signal: ctl.signal,
-        fresh,
+        online: fresh,
         onPartial: (centers) => { if (seq === evacSeq && !ctl.signal.aborted && !stale() && centers.length) { apply(centers); setEvacState('busy', 'Finding more sites…'); } },
       });
       if (seq !== evacSeq) return;                       // replaced by a newer search
@@ -1207,14 +1220,21 @@ const BayanihanMaps = (() => {
       trackData(res);
       if (!res.success) {
         loaded.evac = null;
-        setEvacState('failed', 'Could not load evacuation sites. Check your signal.');
+        if (res.offline) { evacItems = []; drawEvac(); }   // do not leave another area's sites on the map
+        setEvacState('failed', res.offline ? 'No signal and no saved sites in this view.' : 'Could not load evacuation sites. Check your signal.');
         if (!quiet) renderSheet();
         return;
       }
+      if (res.backupOutside && !quiet && evacJump) {    // first look at this layer: go to the saved sites
+        evacJump = false;
+        const n0 = map.getCenter(), n = API.nearestBackupSite && API.nearestBackupSite(n0.lat, n0.lng);
+        if (n) { map.setView([n.lat, n.lng], 14); return; }
+      }
+      evacJump = false;
       loaded.evac = res.centers.length ? area : null;   // an empty result is retried on the next move
       apply(res.centers);
-      if (!res.centers.length) setEvacState('empty', 'No mapped evacuation sites in this area.');
-      else if (res.backup) setEvacState('partial', 'Live search unavailable. Showing the built-in site list.');
+      if (!res.centers.length) setEvacState('empty', res.backupOutside ? 'No saved evacuation sites in this view.' : 'No mapped evacuation sites in this area.');
+      else if (res.backup && !res.primary) setEvacState('partial', 'Live search unavailable. Showing the built-in site list.');
       else if (res.partial) setEvacState('partial', 'Some results may be missing.');
       else setEvacState('idle');
     }
@@ -1659,6 +1679,7 @@ const BayanihanMaps = (() => {
       else if (act === 'pick') openPicker(t.dataset.p);
       else if (act === 'detail') openSiteDetail(t.dataset.id);
       else if (act === 'redoevac') redoEvac();
+      else if (act === 'gobackup') gotoSaved();
       else if (act === 'cancelevac') cancelEvac();
       else if (act === 'swap') swapAB();
       else if (act === 'autob') { routeTo(null); }
