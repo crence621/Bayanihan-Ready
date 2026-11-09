@@ -420,15 +420,27 @@
 
   /* ------------------- HOTLINES, CONTACT NO. AND RESPONDER REPLIES ------------------- */
   // National hotlines. Please verify these (and add your local DRRMO / MDRRMO numbers) before release.
-  const HOTLINES = [
-    { name: 'Emergency (police, fire, medical)', number: '911', desc: 'National emergency hotline', types: ['all'] },
-    { name: 'Philippine National Police', number: '117', desc: 'Crime, robbery, assault', types: ['Robbery', 'Assault', 'Accident'] },
-    { name: 'Bureau of Fire Protection', number: '(02) 8426-0219', desc: 'Fires and rescue', types: ['Fire'] },
-    { name: 'Philippine Red Cross', number: '143', desc: 'Medical help, rescue, relief', types: ['Medical', 'Flood', 'Quake', 'Landslide', 'Accident'] },
-    { name: 'NDRRMC Operations Center', number: '(02) 8911-1406', desc: 'Floods, landslides, earthquakes', types: ['Flood', 'Landslide', 'Quake'] },
-    { name: 'DOH Health Emergency', number: '1555', desc: 'Health concerns and advice', types: ['Medical'] },
+  const DEFAULT_HOTLINES = [
+    { id: 'd911', name: 'Emergency (police, fire, medical)', number: '911', desc: 'National emergency hotline', types: ['all'] },
+    { id: 'd117', name: 'Philippine National Police', number: '117', desc: 'Crime, robbery, assault', types: ['Robbery', 'Assault', 'Accident'] },
+    { id: 'dbfp', name: 'Bureau of Fire Protection', number: '(02) 8426-0219', desc: 'Fires and rescue', types: ['Fire'] },
+    { id: 'd143', name: 'Philippine Red Cross', number: '143', desc: 'Medical help, rescue, relief', types: ['Medical', 'Flood', 'Quake', 'Landslide', 'Accident'] },
+    { id: 'dndr', name: 'NDRRMC Operations Center', number: '(02) 8911-1406', desc: 'Floods, landslides, earthquakes', types: ['Flood', 'Landslide', 'Quake'] },
+    { id: 'ddoh', name: 'DOH Health Emergency', number: '1555', desc: 'Health concerns and advice', types: ['Medical'] },
   ];
-  const LOCAL_KEY = 'bm.localHotline.v1';
+  const LOCAL_KEY = 'bm.localHotline.v1';      // old single local hotline; migrated into the list below
+  const HOTLINES_KEY = 'bm.hotlines.v2';
+  // The list is editable: every hotline (built-in or added) can be edited or removed.
+  let HOTLINES = (() => {
+    const saved = lsGetEarly(HOTLINES_KEY);
+    if (Array.isArray(saved)) return saved;
+    const list = DEFAULT_HOTLINES.map((h) => ({ ...h }));
+    const old = lsGetEarly(LOCAL_KEY);
+    if (old && old.number) list.push({ id: 'h' + Date.now().toString(36), name: old.name || 'Local hotline', number: old.number, desc: 'Your local hotline', types: ['all'] });
+    return list;
+  })();
+  function lsGetEarly(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+  const saveHotlines = () => { try { localStorage.setItem(HOTLINES_KEY, JSON.stringify(HOTLINES)); } catch (e) { /* storage blocked */ } };
   const tel = (n) => 'tel:' + String(n).replace(/[^\d+]/g, '');
   const escH = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
@@ -469,12 +481,10 @@
 
   function renderContact(item) {
     const box = document.getElementById('detail-contact');
-    const local = lsGet(LOCAL_KEY, null);
     const rows = [];
     if (item.contact) rows.push(`<div class="rsp-row"><div><b>${item.mine ? 'Your contact no.' : 'Reporter contact no.'}</b><span>${escH(item.contact)}${item.reporter && !item.mine ? ' · ' + escH(item.reporter) : ''}</span></div>${item.mine ? '' : callBtn(item.contact)}</div>`);
     else rows.push('<div class="rsp-row"><div><b>Reporter contact no.</b><span>Not provided</span></div></div>');
     hotlinesFor(item.type).forEach((h) => rows.push(`<div class="rsp-row"><div><b>${escH(h.name)}</b><span>Hotline ${escH(h.number)}</span></div>${callBtn(h.number)}</div>`));
-    if (local && local.number) rows.push(`<div class="rsp-row"><div><b>${escH(local.name || 'Local DRRMO')}</b><span>Hotline ${escH(local.number)}</span></div>${callBtn(local.number)}</div>`);
     box.innerHTML = rows.join('');
   }
 
@@ -557,23 +567,60 @@
   let hotlinesFrom = 'home';
   document.querySelectorAll('[data-goto="hotlines"]').forEach((el) => el.addEventListener('click', () => {
     const a = document.querySelector('.screen.is-active'); hotlinesFrom = a ? a.dataset.screen : 'home';
-    renderHotlines();
+    hotlineEdit = null; renderHotlines();
   }, true));
   document.getElementById('hotlines-back-btn').addEventListener('click', () => showScreen(hotlinesFrom === 'hotlines' ? 'home' : hotlinesFrom));
-  function renderHotlines() {
-    const local = lsGet(LOCAL_KEY, null);
-    document.getElementById('hotline-list').innerHTML =
-      HOTLINES.map((h) => `<div class="rsp-row"><div><b>${escH(h.name)}</b><span>${escH(h.number)} · ${escH(h.desc)}</span></div>${callBtn(h.number)}</div>`).join('') +
-      `<div class="rsp-local"><p class="rsp-form-title">Your local hotline (barangay / municipal DRRMO)</p>
-        <div class="input-card-box"><input type="text" id="local-hotline-name" placeholder="Name (e.g. Balangiga MDRRMO)" value="${escH(local && local.name)}"></div>
-        <div class="input-card-box"><input type="tel" id="local-hotline-number" placeholder="Number" inputmode="tel" value="${escH(local && local.number)}"></div>
-        <button type="button" class="btn-primary-red" id="local-hotline-save">Save local hotline</button></div>`;
-    document.getElementById('hotline-note').textContent = 'Tap Call to dial. Numbers can change, so please confirm local ones with your LGU.';
-    document.getElementById('local-hotline-save').addEventListener('click', () => {
-      lsSet(LOCAL_KEY, { name: document.getElementById('local-hotline-name').value.trim(), number: document.getElementById('local-hotline-number').value.trim() });
-      renderHotlines();
-    });
+  let hotlineEdit = null;   // id of the hotline being edited, 'new' for the add form, or null
+  const PHONE_RE = /^[+\d][\d\s()-]{2,}$/;
+  function hotlineForm(h, err) {
+    const isNew = !h;
+    return `<div class="rsp-local rsp-hl-form">
+        <p class="rsp-form-title">${isNew ? 'Add a hotline' : 'Edit hotline'}</p>
+        <div class="input-card-box"><input type="text" id="hl-name" placeholder="Name (e.g. Balangiga MDRRMO)" value="${escH(h && h.name)}"></div>
+        <div class="input-card-box"><input type="tel" id="hl-number" placeholder="Number" inputmode="tel" value="${escH(h && h.number)}"></div>
+        <div class="input-card-box"><input type="text" id="hl-desc" placeholder="Note (optional)" value="${escH(h && h.desc)}"></div>
+        <p class="form-error" ${err ? '' : 'hidden'}>${escH(err)}</p>
+        <button type="button" class="btn-primary-red" data-hl="save">${isNew ? 'Add hotline' : 'Save changes'}</button>
+        ${isNew && !HOTLINES.length ? '' : '<button type="button" class="rsp-link-btn" data-hl="cancel">Cancel</button>'}
+      </div>`;
   }
+  function renderHotlines(err) {
+    const rows = HOTLINES.map((h) => {
+      if (hotlineEdit === h.id) return hotlineForm(h, err);
+      return `<div class="rsp-row"><div><b>${escH(h.name)}</b><span>${escH(h.number)}${h.desc ? ' · ' + escH(h.desc) : ''}</span>
+          <span class="rsp-hl-actions"><button type="button" class="rsp-link-btn" data-hl="edit" data-id="${escH(h.id)}">Edit</button><button type="button" class="rsp-link-btn is-danger" data-hl="remove" data-id="${escH(h.id)}">Remove</button></span></div>${callBtn(h.number)}</div>`;
+    }).join('');
+    const empty = HOTLINES.length ? '' : '<p class="rsp-hint">No hotlines saved. Add one below or restore the defaults.</p>';
+    const form = hotlineEdit === 'new' ? hotlineForm(null, err)
+      : `<button type="button" class="btn-primary-red" data-hl="add">+ Add a hotline</button>`;
+    document.getElementById('hotline-list').innerHTML = rows + empty + form +
+      '<button type="button" class="rsp-link-btn" data-hl="reset">Restore default hotlines</button>';
+    document.getElementById('hotline-note').textContent = 'Tap Call to dial. Numbers can change, so please confirm local ones with your LGU.';
+  }
+  document.getElementById('hotline-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hl]');
+    if (!b) return;
+    const act = b.dataset.hl, id = b.dataset.id;
+    if (act === 'add') { hotlineEdit = 'new'; renderHotlines(); }
+    else if (act === 'edit') { hotlineEdit = id; renderHotlines(); }
+    else if (act === 'cancel') { hotlineEdit = null; renderHotlines(); }
+    else if (act === 'remove') {
+      const h = HOTLINES.find((x) => x.id === id);
+      if (h && confirm('Remove "' + h.name + '" from your hotlines?')) { HOTLINES = HOTLINES.filter((x) => x.id !== id); saveHotlines(); hotlineEdit = null; renderHotlines(); }
+    } else if (act === 'reset') {
+      if (confirm('Restore the default hotlines? Your added and edited hotlines will be replaced.')) { HOTLINES = DEFAULT_HOTLINES.map((x) => ({ ...x })); saveHotlines(); hotlineEdit = null; renderHotlines(); }
+    } else if (act === 'save') {
+      const name = document.getElementById('hl-name').value.trim();
+      const number = document.getElementById('hl-number').value.trim();
+      const desc = document.getElementById('hl-desc').value.trim();
+      const bad = (m) => { renderHotlines(m); document.getElementById('hl-name').value = name; document.getElementById('hl-number').value = number; document.getElementById('hl-desc').value = desc; };
+      if (!name) return bad('Enter a name for this hotline.');
+      if (!PHONE_RE.test(number)) return bad('Enter a valid phone number.');
+      if (hotlineEdit === 'new') HOTLINES.push({ id: 'h' + Date.now().toString(36), name, number, desc, types: ['all'] });
+      else HOTLINES = HOTLINES.map((x) => (x.id === hotlineEdit ? { ...x, name, number, desc } : x));
+      saveHotlines(); hotlineEdit = null; renderHotlines();
+    }
+  });
   renderHotlines();
 
   function openEmergencyDetail(id) {
@@ -1632,8 +1679,14 @@
       if (mainMap) mainMap.setBase(b.dataset.base);
       closeBase();
     }));
-    const evacToggle = document.getElementById('evac-toggle');
-    if (evacToggle) evacToggle.addEventListener('change', () => { if (mainMap) mainMap.setShowEvac(evacToggle.checked); });
+    // Demo storm: forces a severe forecast and a serious gauge + blocked road within 5 km, so the bell alert can be shown.
+    const demoToggle = document.getElementById('demo-toggle');
+    if (demoToggle) demoToggle.addEventListener('change', () => {
+      if (!mainMap) return;
+      mainMap.setDemo(demoToggle.checked);
+      if (demoToggle.checked && !['flood', 'landslide'].includes(mainMap.getMode())) mainMap.setMode('flood');   // alerts fire on the Flood / Landslide maps
+      closeBase();
+    });
     ovlOpts.forEach((b) => b.addEventListener('click', () => {
       if (mainMap) mainMap.setOverlay(b.dataset.ovl);
     }));

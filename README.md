@@ -12,7 +12,7 @@ Ensci1
 Flood/landslide/risk levels are estimates from open data, not official warnings (PAGASA, Project NOAH, MGB). Elevation tiles: AWS Terrain Tiles. Weather: Open-Meteo. Radar: RainViewer.
 
 ## Live layers, weather overlay, reports (Maps tab)
-- **Reports layer**: your reports, community reports and live flood / landslide updates in one list and on the map. Shares one store with the Emergencies tab (`BayanihanMaps.addIncident / removeIncident`), so sending or deleting a report updates the map, "Open report" jumps to the report, and "View on map" jumps back.
+- **Reports layer**: your reports and community reports only, in one list and on the map (no flood meters or simulated pins; those stay on the Flood and Landslide layers). Shares one store with the Emergencies tab (`BayanihanMaps.addIncident / removeIncident`), so sending or deleting a report updates the map, "Open report" jumps to the report, and "View on map" jumps back.
 - **Live flood levels / landslide reports are SIMULATED** (no free live feed exists). Flood levels only appear on ground under 3 m; landslide reports only on slopes of 18° or more, scaled by the rain forecast. Swap `simFloodGauges` / `simSlides` in `!js/maps.js` for a real feed. Serious ones near you add an item to Notifications that opens the map.
 - **Weather overlay** (layers button): Rain radar, Rain forecast (next 6 h), Wind, Clouds. Works on any map style and risk layer.
 

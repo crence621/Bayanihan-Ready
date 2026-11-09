@@ -392,6 +392,34 @@ const BayanihanMaps = (() => {
     { title: 'Minor landslide', sev: 2, note: 'Soil and rocks slid down the slope. Keep clear of the area.' },
     { title: 'Road blocked by landslide', sev: 3, note: 'Debris is blocking the road. Use another route.' },
   ];
+  /* ---- DEMO STORM ----
+     Forces a severe forecast (flood + landslide levels) and puts one serious flood gauge and
+     one blocked road about 1 km from the person, so the levels and the 5 km bell alert can be
+     shown without real bad weather. Everything it makes is labelled DEMO. */
+  let demoRun = 0;   // bumps each time the demo is switched on, so its alerts fire again
+  function demoOutlook(w) {
+    const b = w && w.success ? w : { success: true, tempC: 27, feelsC: 32, humidity: 92, rainNowMm: 8, windKmh: 38, gustKmh: 62, days: [] };
+    const hourly = Array.from({ length: 24 }, (_, k) => ({ mm: Math.max(0, Math.round((28 - Math.abs(k - 5) * 3.2) * 10) / 10), p: k < 14 ? 95 : 70 }));
+    const days = (b.days && b.days.length ? b.days : [0, 1, 2, 3].map((k) => ({ date: new Date(Date.now() + k * 864e5).toISOString().slice(0, 10), hi: 29, lo: 24, prob: 90 })))
+      .map((d, k) => ({ ...d, summary: 'Thunderstorm', rainMm: [96, 74, 38, 15][k] || 10, prob: [98, 92, 80, 60][k] || 60 }));
+    return { ...b, success: true, demo: true, summary: 'Thunderstorm', rainNowMm: Math.max(b.rainNowMm || 0, 8),
+      past24: 62, past72: 180, next6: 48, next24: 130, maxRate: 28, maxProb: 98, rateLabel: 'Intense', soil: 0.5,
+      hourly, days, flood: { level: 3, label: 'Severe' }, landslide: { level: 3, label: 'Severe' } };
+  }
+  function demoItems(at, wantFlood, wantSlide) {
+    const km = 1 / 111;   // about 1 km in degrees of latitude
+    const out = { gauges: [], slides: [] };
+    if (wantFlood) out.gauges.push({
+      id: 'demo-fg-' + demoRun, kind: 'gauge', type: 'Flood', title: 'Flood gauge: waist-deep', demo: true,
+      lat: at.lat + 0.8 * km, lng: at.lng + 0.5 * km, elev: 1.1, depth: 85, label: 'Waist-deep', lv: 3,
+      trend: 'Rising', time: Date.now(), source: 'simulated' });
+    if (wantSlide) out.slides.push({
+      id: 'demo-ls-' + demoRun, kind: 'slide', type: 'Landslide', title: 'Road blocked by landslide', demo: true,
+      desc: 'Debris is blocking the road. Use another route.', sev: 3,
+      lat: at.lat - 0.6 * km, lng: at.lng + 0.9 * km, slope: 24, elev: 38, time: Date.now() - 12 * 60000, source: 'simulated' });
+    return out;
+  }
+
   async function simSlides(bounds, trigger) {
     if (trigger < 1) return [];
     const { pts } = gridPoints(bounds, 22);
@@ -651,10 +679,10 @@ const BayanihanMaps = (() => {
     none:       {},
     landslide:  { extra: ['slope', 'hazardLandslide', 'liveSlide'] },
     weather:    { extra: ['radar'] },
-    reports:    { extra: ['liveFlood', 'liveSlide'] },
+    reports:    { extra: [] },   // only the reports themselves; no flood meters or simulated pins
     evacuation: { extra: ['evacArea', 'evac', 'responders'], minZoom: 13, zoomTo: 15 },
     flood:      { extra: ['lowground', 'floodlive', 'water', 'hazardFlood', 'liveFlood'] },
-    route:      { extra: ['evacArea', 'evac', 'route'], minZoom: 13, zoomTo: 15 },
+    route:      { extra: ['route'], minZoom: 13, zoomTo: 15 },   // sites are loaded for the route but only drawn on the Evacuation layer
   };
 
   const OVERLAYS = {
@@ -747,7 +775,7 @@ const BayanihanMaps = (() => {
     let outlook = null;             // { at:{lat,lng}, weather, river }
     let outlookBusy = false;
     let radar = { frames: [], idx: 0, timer: null, playing: false };
-    let showEvac = o.showEvac !== false;   // evacuation centers stay visible on every layer
+    let demo = false;               // Demo storm: forced severe forecast + a gauge and blocked road near you
     let ovl = 'none';               // weather overlay on top of any layer: radar / clouds / rain / wind
     let wx = { key: '', data: null };
     let wxRun = 0;
@@ -775,6 +803,11 @@ const BayanihanMaps = (() => {
 
     /* ---- bottom sheet ---- */
     const host = o.panelHost || el.parentElement;
+    const demoPill = document.createElement('div');
+    demoPill.className = 'bm-demo-pill';
+    demoPill.textContent = 'DEMO STORM';
+    demoPill.hidden = true;
+    host.appendChild(demoPill);
     const sheet = document.createElement('section');
     sheet.className = 'bm-sheet';
     sheet.hidden = true;
@@ -849,7 +882,7 @@ const BayanihanMaps = (() => {
         outlook = null;
         const jobs = [run(true), loadOutlook()];
         const c = map.getCenter();
-        const loadsEvac = mode === 'evacuation' || mode === 'route' || showEvac;
+        const loadsEvac = mode === 'evacuation' || mode === 'route';
         if (!loadsEvac && map.getSize().x && map.getZoom() >= 12) jobs.push(API.getEvacuationCenters(toBox(map.getBounds().pad(0.15)), { fresh: true }).then(trackData));
         await Promise.allSettled(jobs);
       } finally { updating = false; paintStatus(); }
@@ -947,7 +980,6 @@ const BayanihanMaps = (() => {
       if (!map.hasLayer(base)) base.addTo(map);
 
       const want = new Set(def.extra || []);
-      if (showEvac) { want.add('evacArea'); want.add('evac'); }
       if (ovl === 'radar') want.add('radar');
       if (ovl === 'clouds') want.add('clouds');
       if (ovl === 'rain' || ovl === 'wind') want.add('wxgrid');
@@ -979,7 +1011,7 @@ const BayanihanMaps = (() => {
       if (BASE_ALIAS[name]) { setBase(name); return; }
       const def = MODES[name] || MODES.none;
       mode = MODES[name] ? name : 'none';
-      if (mode === 'evacuation' || mode === 'route') evacJump = true;
+      if (mode === 'evacuation' || mode === 'route') { evacJump = true; evacBarClosed = false; }
       applyLayers();
       drawReports();
       updateChip();
@@ -1149,10 +1181,12 @@ const BayanihanMaps = (() => {
     host.appendChild(evacBar);
     L.DomEvent.disableClickPropagation(evacBar);
 
+    let evacBarClosed = false;   // person tapped X on the status bar; stays closed until the next search
     function paintEvacBar() {
-      const relevant = mode === 'evacuation' || mode === 'route' || showEvac;
+      // the finder is on when Evacuation (or Route) is picked in the bar; background loading stays silent
+      const relevant = mode === 'evacuation' || mode === 'route';
       const k = evacState.kind;
-      if (!relevant || k === 'idle' || pick || detailId) { evacBar.hidden = true; return; }
+      if (!relevant || k === 'idle' || pick || detailId || (evacBarClosed && k !== 'busy')) { evacBar.hidden = true; return; }
       const label = k === 'busy' ? 'Cancel' : k === 'failed' ? 'Try again' : k === 'empty' && API.getBackupInfo && API.getBackupInfo() ? 'Search online' : 'Search again';
       evacBar.hidden = false;
       evacBar.className = 'bm-evacbar is-' + k;
@@ -1160,9 +1194,13 @@ const BayanihanMaps = (() => {
       const c0 = map.getCenter();
       const near = k !== 'busy' && API.nearestBackupSite ? API.nearestBackupSite(c0.lat, c0.lng) : null;
       const go = near && near.km > 1.5 && (k === 'failed' || k === 'empty') ? `<button type="button" data-eb="goto">Show saved sites (${near.km < 10 ? near.km.toFixed(1) : Math.round(near.km)} km away)</button>` : '';
-      evacBar.innerHTML = `<i></i><span>${esc(evacState.msg)}</span><button type="button" data-eb="${k === 'busy' ? 'cancel' : 'redo'}">${label}</button>${go}`;
+      evacBar.innerHTML = `<i></i><span>${esc(evacState.msg)}</span><button type="button" data-eb="${k === 'busy' ? 'cancel' : 'redo'}">${label}</button>${go}${k === 'busy' ? '' : '<button type="button" class="bm-evacbar-x" data-eb="close" aria-label="Close">\u2715</button>'}`;
     }
-    function setEvacState(kind, msg = '') { evacState = { kind, msg }; paintEvacBar(); }
+    function setEvacState(kind, msg = '') {
+      if (kind === 'busy' || kind !== evacState.kind) evacBarClosed = false;   // a new search or a new result reopens the bar
+      evacState = { kind, msg };
+      paintEvacBar();
+    }
     function gotoSaved() {
       const c0 = map.getCenter();
       const n = API.nearestBackupSite && API.nearestBackupSite(c0.lat, c0.lng);
@@ -1177,7 +1215,8 @@ const BayanihanMaps = (() => {
     evacBar.addEventListener('click', (e) => {
       const b = e.target.closest('[data-eb]');
       if (!b) return;
-      if (b.dataset.eb === 'cancel') cancelEvac();
+      if (b.dataset.eb === 'close') { evacBarClosed = true; paintEvacBar(); }
+      else if (b.dataset.eb === 'cancel') cancelEvac();
       else if (b.dataset.eb === 'goto') gotoSaved();
       else redoEvac();
     });
@@ -1283,8 +1322,9 @@ const BayanihanMaps = (() => {
       outlookBusy = true;
       info('Checking the forecast\u2026', 'busy');
       try {
-        const [w, riv] = await Promise.all([API.getWeatherOutlook(pt), API.getRiverOutlook(pt)]);
+        let [w, riv] = await Promise.all([API.getWeatherOutlook(pt), API.getRiverOutlook(pt)]);
         trackData(w);
+        if (demo) { w = demoOutlook(w); riv = { success: false }; }
         if (!w.success) { info(w.error, 'error'); return; }
         info('');
         outlook = { at: pt, time: Date.now(), weather: w, river: riv.success ? riv : null };
@@ -1566,8 +1606,10 @@ const BayanihanMaps = (() => {
     function feedItems() {
       const ref = refPoint();
       const items = incidents.map((i) => ({ ...i, kind: 'report' }));
-      live.gauges.filter((g) => g.depth > 0).forEach((g) => items.push({ ...g, desc: `${g.depth} cm of water on ground ${g.elev} m (${g.trend.toLowerCase()})`, title: 'Flood gauge: ' + g.label }));
-      live.slides.forEach((r) => items.push({ ...r }));
+      if (mode !== 'reports') {   // the Reports list matches the map: reports only
+        live.gauges.filter((g) => g.depth > 0).forEach((g) => items.push({ ...g, desc: `${g.depth} cm of water on ground ${g.elev} m (${g.trend.toLowerCase()})`, title: 'Flood gauge: ' + g.label }));
+        live.slides.forEach((r) => items.push({ ...r }));
+      }
       items.forEach((i) => { i.distKm = API.distanceKm(ref, i); });
       return items.sort((a, b) => a.distKm - b.distKm);
     }
@@ -1594,10 +1636,10 @@ const BayanihanMaps = (() => {
         </article>`;
       }).join('');
       const head = `<span class="bm-title"><i class="bm-dot rep"></i>Reports &amp; emergencies <b>${all.length}</b></span>
-        <span class="bm-sub">Yours, the community's, and live flood / landslide updates</span>`;
+        <span class="bm-sub">Yours and the community's reports</span>`;
       setSheet(head, `<div class="bm-chips">${chips}</div>
         <div class="bm-scroll">${cards || '<p class="bm-empty">Nothing reported in this view. Pan around or zoom out.</p>'}</div>
-        ${map.getZoom() < 12 ? '<p class="bm-foot">Zoom in to also see live flood and landslide updates.</p>' : ''}`);
+        `);
     }
 
     function focusItem(id) {
@@ -1633,13 +1675,16 @@ const BayanihanMaps = (() => {
         if (!stale() && (force || pendingDest || !route)) await loadRoute(pendingDest, stale);
       } else if (mode === 'flood') {
         await Promise.all([loadWater(force, stale), loadLive(stale)]);
-      } else if (mode === 'landslide' || mode === 'reports') {
+      } else if (mode === 'landslide') {
         await loadLive(stale);
+      } else if (mode === 'reports') {
+        // Reports shows only reports: drop any flood meters / simulated pins left from another layer
+        if (live.gauges.length || live.slides.length) { live = { gauges: [], slides: [], sig: '' }; drawLive(); }
+        renderSheet();
       } else if (mode === 'weather') {
         await loadOutlook();
       }
       if (ovl === 'rain' || ovl === 'wind') loadWxGrid(false);
-      if (showEvac && mode !== 'evacuation' && mode !== 'route') loadEvac(force, () => false, true);
       if (!stale() && revealPending && mode !== 'route') {
         revealPending = false;
         revealPoint(mode === 'evacuation' ? refPoint() : user ? L.latLng(user.lat, user.lng) : map.getCenter());
@@ -2027,6 +2072,7 @@ const BayanihanMaps = (() => {
       html: `<div class="bm-slide s${r.sev}"><svg viewBox="0 0 14 14" width="16" height="16" fill="#fff" aria-hidden="true"><path d="M7 1.5 13 12H1L7 1.5zM6.3 5.5h1.4v3.2H6.3zM6.3 9.5h1.4v1.3H6.3z" fill-rule="evenodd"/></svg></div>`,
       iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -17],
     });
+    const DEMO_NOTE = '<div class="bm-pop-meta bm-pop-warn">DEMO: made up to show how alerts work. Not a real report.</div>';
     const SIM_NOTE = '<div class="bm-pop-meta bm-pop-warn">Simulated from the risk map and rain forecast until a live feed is connected.</div>';
 
     function gaugePopup(g) {
@@ -2035,13 +2081,13 @@ const BayanihanMaps = (() => {
       return `<div class="bm-pop"><div class="bm-pop-title">Flood gauge: ${esc(g.label)}</div>
         <div class="bm-pop-sub">${g.depth} cm of water · ground ${g.elev} m · ${esc(g.trend)}</div>
         <div class="bm-pop-risk r${g.lv}">${msg}</div>
-        <div class="bm-pop-meta">Updated ${ago(g.time)}</div>${SIM_NOTE}</div>`;
+        <div class="bm-pop-meta">Updated ${ago(g.time)}</div>${g.demo ? DEMO_NOTE : SIM_NOTE}</div>`;
     }
     function slidePopup(r) {
       return `<div class="bm-pop"><div class="bm-pop-title">${esc(r.title)}</div>
         <div class="bm-pop-sub">Landslide report · ${ago(r.time)}</div>
         <div class="bm-pop-risk r${r.sev}">${esc(r.desc)}</div>
-        <div class="bm-pop-meta">Slope ${r.slope}° · ground ${r.elev} m</div>${SIM_NOTE}</div>`;
+        <div class="bm-pop-meta">Slope ${r.slope}° · ground ${r.elev} m</div>${r.demo ? DEMO_NOTE : SIM_NOTE}</div>`;
     }
 
     function drawLive() {
@@ -2064,15 +2110,15 @@ const BayanihanMaps = (() => {
       if (g && !firedAlerts.has('f' + g.id + g.lv)) {
         firedAlerts.add('f' + g.id + g.lv);
         o.onAlert({ icon: '!assets/!buttons/Flood.png', mode: 'flood', lat: g.lat, lng: g.lng,
-          title: `Flood alert: ${g.label.toLowerCase()} water nearby`,
-          body: `${g.depth} cm of water about ${fmtKm(API.distanceKm(me, g))} away (simulated). Avoid the area and move to higher ground.` });
+          title: `${g.demo ? 'DEMO ' : ''}Flood alert: ${g.label.toLowerCase()} water nearby`,
+          body: `${g.depth} cm of water about ${fmtKm(API.distanceKm(me, g))} away (${g.demo ? 'demo' : 'simulated'}). Avoid the area and move to higher ground.` });
       }
       const r = live.slides.filter((x) => x.sev >= 3 && near(x))[0];
       if (r && !firedAlerts.has('s' + r.id)) {
         firedAlerts.add('s' + r.id);
         o.onAlert({ icon: '!assets/!buttons/Landslide.png', mode: 'landslide', lat: r.lat, lng: r.lng,
-          title: 'Landslide report: road blocked',
-          body: `A slide is blocking a road about ${fmtKm(API.distanceKm(me, r))} away (simulated). Choose another route.` });
+          title: (r.demo ? 'DEMO ' : '') + 'Landslide report: road blocked',
+          body: `A slide is blocking a road about ${fmtKm(API.distanceKm(me, r))} away (${r.demo ? 'demo' : 'simulated'}). Choose another route.` });
       }
     }
 
@@ -2080,8 +2126,8 @@ const BayanihanMaps = (() => {
       await loadOutlook();
       if (stale && stale()) return;
       const w = outlook && outlook.weather;
-      const wantFlood = mode === 'flood' || mode === 'reports';
-      const wantSlide = mode === 'landslide' || mode === 'reports';
+      const wantFlood = mode === 'flood';
+      const wantSlide = mode === 'landslide';
       if (!w || map.getZoom() < 12 || !(wantFlood || wantSlide)) {
         if (live.gauges.length || live.slides.length) { live = { gauges: [], slides: [], sig: '' }; drawLive(); }
         renderSheet();
@@ -2099,6 +2145,12 @@ const BayanihanMaps = (() => {
         wantSlide ? simSlides(view, w.landslide.level) : [],
       ]);
       if (stale && stale()) return;
+      if (demo) {
+        const at = user ? { lat: user.lat, lng: user.lng } : map.getCenter();
+        const d = demoItems(at, wantFlood, wantSlide);
+        gauges.unshift(...d.gauges);
+        slides.unshift(...d.slides);
+      }
       const sig = gauges.map((g) => g.id + g.depth).join() + '|' + slides.map((r) => r.id).join();
       if (sig !== live.sig) { live = { gauges, slides, sig }; drawLive(); }
       maybeAlert();
@@ -2291,7 +2343,6 @@ const BayanihanMaps = (() => {
       locate,
       setBase,
       setOverlay,
-      setShowEvac(v) { showEvac = !!v; paintEvacBar(); applyLayers(); if (showEvac) loadEvac(true, () => false, true); },
       focusPoint(lat, lng, z = 16) { touched = true; map.setView(aim([lat, lng], z), z, { animate: false }); },
       // switch to the Reports layer and open one report's pin
       focusReport(id) {
@@ -2302,6 +2353,21 @@ const BayanihanMaps = (() => {
         map.setView(aim([inc.lat, inc.lng], 16), 16, { animate: false });
         setTimeout(() => { const m = itemMarkers.get(id); if (m) m.openPopup(); }, 350);
       },
+      // Demo storm on/off: re-reads the forecast, redraws the levels and raises the alerts
+      setDemo(v) {
+        v = !!v;
+        if (v === demo) return;
+        demo = v;
+        if (demo) demoRun++;
+        demoPill.hidden = !demo;
+        outlook = null;
+        live = { gauges: [], slides: [], sig: '' };
+        drawLive();
+        if (demo && !user) info('Demo storm on. Turn on location so the alert can find you.', 'warn');
+        applyLayers();
+        run(true);
+      },
+      isDemo: () => demo,
       getOverlay: () => ovl,
       getMode: () => mode,
       getBase: () => baseName,
