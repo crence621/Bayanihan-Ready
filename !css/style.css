@@ -2929,3 +2929,31 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 .rc-item span{ color:var(--gray); line-height:1.4; }
 .rc-item-actions{ display:flex; flex-direction:column; align-items:flex-end; gap:0; flex:none; }
 .rc-body textarea{ width:100%; border:0; background:transparent; font:inherit; resize:vertical; outline:none; }
+
+/* ---- Typhoon tracker (demo) + extra weather overlays ---- */
+.ovl-ty { border-color: #D97706; color: #B45309; }
+.ovl-ty.is-selected { background: #D97706; border-color: #D97706; color: #fff; }
+.bm-ty-card { position: absolute; left: 10px; right: 62px; bottom: calc(var(--bm-sheet-h, 0px) + 8px); z-index: 1060; max-width: 440px; padding: 10px 12px 9px; border-radius: 14px; background: rgba(255,255,255,.97); box-shadow: 0 3px 14px rgba(0,0,0,.3); font-family: var(--font-body); }
+.bm-ty-card[hidden] { display: none; }
+.bm-ty-head { display: flex; align-items: center; gap: 8px; padding-right: 26px; position: relative; }
+.bm-ty-head > button { position: absolute; top: -3px; right: -4px; width: 26px; height: 26px; border: none; background: none; font-size: 19px; line-height: 1; color: #555; cursor: pointer; }
+.bm-ty-title { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.bm-ty-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.bm-ty-demo { background: #D97706; color: #fff; font-weight: 800; letter-spacing: .06em; }
+.bm-ty-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 10px; margin: 8px 0; }
+.bm-ty-stats > div { display: flex; flex-direction: column; min-width: 0; }
+.bm-ty-stats small { font-size: 9.5px; color: var(--gray); }
+.bm-ty-stats b { font-size: 14px; line-height: 1.25; }
+.bm-ty-stats span { font-size: 10.5px; color: #444; }
+.bm-ty-ctl { display: flex; align-items: center; gap: 10px; }
+.bm-ty-ctl .bm-btn { flex: none; min-width: 64px; }
+.bm-ty-ctl input[type=range] { flex: 1; accent-color: #D97706; min-height: 28px; }
+.bm-ty-key { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin-top: 6px; font-size: 9.5px; color: #444; }
+.bm-ty-key i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.bm-ty-key i.cone { background: rgba(220,38,38,.18); border: 1px dashed #DC2626; }
+.bm-ty-note { margin: 5px 0 0; font-size: 9.5px; color: var(--gray); }
+.bm-ty-lbl { transform: translate(-50%, 8px); font-size: 9px; }
+.bm-ty-eye { width: 54px; height: 54px; filter: drop-shadow(0 1px 3px rgba(0,0,0,.45)); }
+.bm-ty-spin { transform-origin: 27px 27px; animation: bm-ty-rot 3.2s linear infinite; }
+@keyframes bm-ty-rot { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bm-ty-spin { animation: none; } }

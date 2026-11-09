@@ -695,7 +695,7 @@ const BayanihanAPI = (() => {
         }
         const r = (v) => v.toFixed(3);
         const url = `${OPEN_METEO}?latitude=${pts.map((p) => r(p.lat)).join(',')}&longitude=${pts.map((p) => r(p.lng)).join(',')}` +
-          '&current=wind_speed_10m,wind_direction_10m,cloud_cover&hourly=precipitation&forecast_hours=6&wind_speed_unit=kmh&timezone=auto';
+          '&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,temperature_2m,relative_humidity_2m,pressure_msl&hourly=precipitation&forecast_hours=6&wind_speed_unit=kmh&timezone=auto';
         const d = await fetchJSON(url);
         const arr = Array.isArray(d) ? d : [d];
         const cells = arr.map((x, k) => ({
@@ -703,7 +703,11 @@ const BayanihanAPI = (() => {
           rain6: Math.round(((x.hourly && x.hourly.precipitation) || []).reduce((a, b) => a + (b || 0), 0) * 10) / 10,
           windKmh: Math.round(x.current.wind_speed_10m),
           windDir: x.current.wind_direction_10m,
+          gustKmh: Math.round(x.current.wind_gusts_10m || 0),
           cloud: x.current.cloud_cover,
+          tempC: Math.round(x.current.temperature_2m * 10) / 10,
+          humidity: Math.round(x.current.relative_humidity_2m),
+          pressure: Math.round(x.current.pressure_msl),
         }));
         return { success: true, cells, dLat: (north - south) / n, dLng: (east - west) / n };
       } catch (err) {

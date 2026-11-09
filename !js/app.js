@@ -1902,6 +1902,8 @@
       if (!mainMap) return;
       mainMap.setDemo(demoToggle.checked);
       if (demoToggle.checked && !['flood', 'landslide', 'surge'].includes(mainMap.getMode())) mainMap.setMode('flood');   // alerts fire on the Flood / Landslide maps
+      if (demoToggle.checked) mainMap.setOverlay('typhoon');                       // the demo storm also shows its typhoon track
+      else if (mainMap.getOverlay() === 'typhoon') mainMap.setOverlay('none');
       closeBase();
     });
     ovlOpts.forEach((b) => b.addEventListener('click', () => {

@@ -704,7 +704,12 @@ const BayanihanMaps = (() => {
     clouds: 'Clouds (satellite)',
     rain:   'Rain forecast, next 6 h',
     wind:   'Wind',
+    temp:   'Temperature',
+    pressure: 'Air pressure (low = storm)',
+    humidity: 'Humidity',
+    typhoon: 'Typhoon tracker (DEMO)',
   };
+  const GRID_OVL = ['rain', 'wind', 'temp', 'pressure', 'humidity'];   // overlays drawn from the Open-Meteo grid
   const LV = ['Low', 'Moderate', 'High', 'Severe'];
 
   /* ---- Typhoon wind signal (PAGASA TCWS) ---- */
@@ -772,7 +777,7 @@ const BayanihanMaps = (() => {
     const groups = {
       responders: L.layerGroup(), evacArea: L.layerGroup(), evac: L.layerGroup(),
       water: L.layerGroup(), route: L.layerGroup(),
-      liveFlood: L.layerGroup(), liveSlide: L.layerGroup(), wxgrid: L.layerGroup(),
+      liveFlood: L.layerGroup(), liveSlide: L.layerGroup(), wxgrid: L.layerGroup(), tytrack: L.layerGroup(),
     };
     const extras = {
       hillshade: L.tileLayer(ESRI + 'Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}', {
@@ -1031,7 +1036,8 @@ const BayanihanMaps = (() => {
       const want = new Set(def.extra || []);
       if (ovl === 'radar') want.add('radar');
       if (ovl === 'clouds') want.add('clouds');
-      if (ovl === 'rain' || ovl === 'wind') want.add('wxgrid');
+      if (GRID_OVL.includes(ovl)) want.add('wxgrid');
+      if (ovl === 'typhoon') want.add('tytrack');
       if (!(extras.floodlive.waterLevel > 0)) want.delete('floodlive');
       if (mode === 'flood') {
         if (!floodShow.risk) ['lowground', 'water', 'hazardFlood'].forEach((k) => want.delete(k));
@@ -1825,7 +1831,7 @@ const BayanihanMaps = (() => {
       } else if (mode === 'weather') {
         await loadOutlook();
       }
-      if (ovl === 'rain' || ovl === 'wind') loadWxGrid(false);
+      if (GRID_OVL.includes(ovl)) loadWxGrid(false);
       if (!stale() && revealPending && mode !== 'route') {
         revealPending = false;
         revealPoint(mode === 'evacuation' ? refPoint() : user ? L.latLng(user.lat, user.lng) : map.getCenter());
@@ -2309,6 +2315,10 @@ const BayanihanMaps = (() => {
     /* ================= WEATHER OVERLAY (any layer) ================= */
     const RAIN_STEPS = [[0.2, '#BDE8FF'], [1, '#5DB8FF'], [3, '#2ECC71'], [6, '#F4D03F'], [12, '#F39C12'], [25, '#E5342E'], [1e9, '#A4006B']];
     const rainColor = (mm) => { for (const [lim, c] of RAIN_STEPS) if (mm < lim) return c; return '#A4006B'; };
+    const stepColor = (steps, v) => { for (const [lim, c] of steps) if (v < lim) return c; return steps[steps.length - 1][1]; };
+    const tempColor = (t) => stepColor([[22, '#5DB8FF'], [25, '#2ECC71'], [28, '#F4D03F'], [31, '#F39C12'], [34, '#E5342E'], [1e9, '#A4006B']], t);
+    const pressureColor = (p) => stepColor([[996, '#A4006B'], [1002, '#E5342E'], [1007, '#F39C12'], [1011, '#F4D03F'], [1015, '#2ECC71'], [1e9, '#5DB8FF']], p);
+    const humidColor = (h) => stepColor([[60, '#F4D03F'], [72, '#BDE8FF'], [82, '#5DB8FF'], [90, '#2D7FD6'], [1e9, '#1F4E99']], h);
     const windColor = (k) => (k < 15 ? '#2ECC71' : k < 30 ? '#F4D03F' : k < 50 ? '#F39C12' : '#E5342E');
 
     const chip = document.createElement('div');
@@ -2318,12 +2328,16 @@ const BayanihanMaps = (() => {
     chip.addEventListener('click', (e) => { if (e.target.closest('[data-off]')) setOverlay('none'); });
 
     function updateChip() {
-      if (ovl === 'none') { chip.hidden = true; return; }
+      if (ovl === 'none' || ovl === 'typhoon') { chip.hidden = true; return; }   // the typhoon tracker has its own card
       const ramps = {
         radar: ['Light', 'Heavy', 'linear-gradient(90deg,#9BE3FF,#2FA0FF,#2ECC40,#FFE14D,#FF9F1C,#E5342E,#A4006B)'],
         rain: ['None', 'Heavy', 'linear-gradient(90deg,#BDE8FF,#5DB8FF,#2ECC71,#F4D03F,#F39C12,#E5342E,#A4006B)'],
         clouds: ['Clear', 'Thick', 'linear-gradient(90deg,rgba(255,255,255,.2),#fff,#9aa3ad)'],
         wind: ['Calm', 'Strong', 'linear-gradient(90deg,#2ECC71,#F4D03F,#F39C12,#E5342E)'],
+        temp: ['Cool', 'Hot', 'linear-gradient(90deg,#5DB8FF,#2ECC71,#F4D03F,#F39C12,#E5342E,#A4006B)'],
+        pressure: ['Low', 'High', 'linear-gradient(90deg,#A4006B,#E5342E,#F39C12,#F4D03F,#2ECC71,#5DB8FF)'],
+        humidity: ['Dry', 'Humid', 'linear-gradient(90deg,#F4D03F,#BDE8FF,#5DB8FF,#2D7FD6,#1F4E99)'],
+        typhoon: ['Weak', 'Super typhoon', 'linear-gradient(90deg,#5DB8FF,#2ECC71,#F4D03F,#F39C12,#E5342E,#A21CAF)'],
       }[ovl];
       let t = '';
       if (ovl === 'radar' && radar.frames.length) t = ' · ' + radarLabel();
@@ -2336,7 +2350,7 @@ const BayanihanMaps = (() => {
     function drawWx() {
       groups.wxgrid.clearLayers();
       const d = wx.data;
-      if (!d || (ovl !== 'rain' && ovl !== 'wind')) return;
+      if (!d || !GRID_OVL.includes(ovl)) return;
       d.cells.forEach((c) => {
         if (ovl === 'rain') {
           if (c.rain6 < 0.2) return;
@@ -2344,16 +2358,25 @@ const BayanihanMaps = (() => {
             { stroke: false, fillColor: rainColor(c.rain6), fillOpacity: 0.5, interactive: false }).addTo(groups.wxgrid);
           L.marker([c.lat, c.lng], { interactive: false, icon: L.divIcon({ className: 'bm-pin-wrap', iconSize: [0, 0],
             html: `<span class="bm-wx-label">${c.rain6 < 10 ? c.rain6.toFixed(1) : Math.round(c.rain6)} mm</span>` }) }).addTo(groups.wxgrid);
-        } else {
+        } else if (ovl === 'wind') {
           const col = windColor(c.windKmh);
           L.marker([c.lat, c.lng], { interactive: false, icon: L.divIcon({ className: 'bm-pin-wrap', iconSize: [40, 40], iconAnchor: [20, 20],
             html: `<div class="bm-wind"><svg viewBox="0 0 20 20" width="26" height="26" style="transform:rotate(${(c.windDir + 180) % 360}deg)"><path d="M10 1 16 17l-6-4-6 4z" fill="${col}" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"/></svg><span>${c.windKmh}</span></div>` }) }).addTo(groups.wxgrid);
+        } else {
+          const v = ovl === 'temp' ? c.tempC : ovl === 'pressure' ? c.pressure : c.humidity;
+          if (v == null || isNaN(v)) return;
+          const col = ovl === 'temp' ? tempColor(v) : ovl === 'pressure' ? pressureColor(v) : humidColor(v);
+          const txt = ovl === 'temp' ? Math.round(v) + '°C' : ovl === 'pressure' ? v + ' hPa' : v + '%';
+          L.rectangle([[c.lat - d.dLat / 2, c.lng - d.dLng / 2], [c.lat + d.dLat / 2, c.lng + d.dLng / 2]],
+            { stroke: false, fillColor: col, fillOpacity: 0.5, interactive: false }).addTo(groups.wxgrid);
+          L.marker([c.lat, c.lng], { interactive: false, icon: L.divIcon({ className: 'bm-pin-wrap', iconSize: [0, 0],
+            html: `<span class="bm-wx-label">${txt}</span>` }) }).addTo(groups.wxgrid);
         }
       });
     }
 
     async function loadWxGrid(force) {
-      if (ovl !== 'rain' && ovl !== 'wind') return;
+      if (!GRID_OVL.includes(ovl)) return;
       if (map.getZoom() < 7) { groups.wxgrid.clearLayers(); info('Zoom in a little to see the weather overlay.', 'warn'); return; }
       const v = map.getBounds();
       const key = [v.getSouth(), v.getWest(), v.getNorth(), v.getEast()].map((x) => x.toFixed(2)).join();
@@ -2371,7 +2394,8 @@ const BayanihanMaps = (() => {
     function setOverlay(name) {
       ovl = OVERLAYS[name] ? name : 'none';
       wxRun++;
-      if (ovl !== 'rain' && ovl !== 'wind') groups.wxgrid.clearLayers();
+      if (!GRID_OVL.includes(ovl)) groups.wxgrid.clearLayers();
+      if (ovl !== 'typhoon') hideTyphoon(); else showTyphoon();
       applyLayers();
       updateChip();
       if (o.onOverlayChange) o.onOverlayChange(ovl);
@@ -2383,6 +2407,183 @@ const BayanihanMaps = (() => {
         });
       }
       loadWxGrid(true);
+    }
+
+    /* ================= TYPHOON TRACKER (DEMO) =================
+       A made-up typhoon, built around the person's location (or the map centre), so the
+       tracker can be shown without a real storm. It draws the past track, the forecast track
+       with its cone of uncertainty, wind rings (gale / storm / typhoon force) and the eye,
+       and a time slider + play button moves the storm along its path. Everything is labelled
+       DEMO. Swap buildDemoTyphoon() for a real PAGASA / JTWC feed to track a real storm. */
+    const TY_FROM = -4, TY_TO = 8, TY_STEP_H = 6;               // 6-hour steps: 24 h ago .. 48 h ahead
+    const TY_WIND = [70, 90, 115, 145, 175, 195, 180, 150, 115, 90, 75, 60, 50];   // km/h, index = step - TY_FROM
+    const TY_CATS = [
+      [62, 'Tropical depression', '#5DB8FF'], [89, 'Tropical storm', '#2ECC71'], [118, 'Severe tropical storm', '#F4D03F'],
+      [185, 'Typhoon', '#E5342E'], [1e9, 'Super typhoon', '#A21CAF'],
+    ];
+    const tyCat = (w) => TY_CATS.find((c) => w < c[0]);
+    const toRad = (d) => (d * Math.PI) / 180;
+    function destPoint(p, bearing, km) {
+      const R = 6371, b = toRad(bearing), d = km / R, la1 = toRad(p.lat), lo1 = toRad(p.lng);
+      const la2 = Math.asin(Math.sin(la1) * Math.cos(d) + Math.cos(la1) * Math.sin(d) * Math.cos(b));
+      const lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
+      return { lat: (la2 * 180) / Math.PI, lng: (((lo2 * 180) / Math.PI + 540) % 360) - 180 };
+    }
+    function bearingTo(a, b) {
+      const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
+      const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
+      return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    }
+    // The eye passes right over `at` 12 h from now, moving west-north-west at about 22 km/h.
+    function buildDemoTyphoon(at) {
+      const brg = (k) => 285 + (k - TY_FROM) * 2;
+      const pts = {};
+      pts[2] = { lat: at.lat, lng: at.lng };
+      for (let k = 2; k < TY_TO; k++) pts[k + 1] = destPoint(pts[k], brg(k), k >= 2 ? 120 : 132);
+      for (let k = 2; k > TY_FROM; k--) pts[k - 1] = destPoint(pts[k], brg(k - 1) + 180, 132);
+      const steps = [];
+      for (let k = TY_FROM; k <= TY_TO; k++) {
+        const w = TY_WIND[k - TY_FROM];
+        steps.push({ k, ...pts[k], wind: w, gust: Math.round(w * 1.3), hPa: Math.round(1004 - (w - 50) * 0.75),
+          coneKm: k < 0 ? 0 : 50 + k * 28, time: Date.now() + k * TY_STEP_H * 3600e3 });
+      }
+      steps.forEach((s, i) => { const nx = steps[i + 1] || null, pv = steps[i - 1] || null; s.heading = Math.round(nx ? bearingTo(s, nx) : bearingTo(pv, s)); });
+      return steps;
+    }
+    const compass = (b) => ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'][Math.round(b / 22.5) % 16];
+    const tyClock = (t) => new Date(t).toLocaleString([], { weekday: 'short', hour: 'numeric' });
+    const tyRings = (w) => { const g = 60 + w * 1.3; return { gale: g, storm: g * 0.55, ty: w >= 118 ? g * 0.28 : 0 }; };
+
+    const ty = { steps: null, k: 0, timer: null, now: L.layerGroup(), fitted: false };
+    groups.tytrack.addLayer(ty.now);
+    const tyCard = document.createElement('section');
+    tyCard.className = 'bm-ty-card';
+    tyCard.hidden = true;
+    tyCard.setAttribute('aria-label', 'Typhoon tracker (demo)');
+    host.appendChild(tyCard);
+    L.DomEvent.disableClickPropagation(tyCard);
+    L.DomEvent.disableScrollPropagation(tyCard);
+
+    function tyEyeIcon(col) {
+      return L.divIcon({ className: 'bm-pin-wrap', iconSize: [54, 54], iconAnchor: [27, 27],
+        html: `<div class="bm-ty-eye"><svg viewBox="0 0 54 54" width="54" height="54" aria-hidden="true">
+          <g class="bm-ty-spin"><path d="M27 27c0-12 8-20 20-20-8 3-9 9-6 14 3 5 1 11-6 12z" fill="${col}" opacity=".85"/>
+          <path d="M27 27c0 12-8 20-20 20 8-3 9-9 6-14-3-5-1-11 6-12z" fill="${col}" opacity=".85"/></g>
+          <circle cx="27" cy="27" r="5.5" fill="#fff" stroke="${col}" stroke-width="2"/></svg></div>` });
+    }
+
+    function drawTyNow() {
+      ty.now.clearLayers();
+      const s = ty.steps[ty.k - TY_FROM], cat = tyCat(s.wind), at = { lat: s.lat, lng: s.lng }, r = tyRings(s.wind);
+      L.circle(at, { radius: r.gale * 1000, stroke: true, weight: 1.5, color: '#CA8A04', dashArray: '4 4', fillColor: '#F4D03F', fillOpacity: 0.14, interactive: false }).addTo(ty.now);
+      L.circle(at, { radius: r.storm * 1000, stroke: true, weight: 1.5, color: '#EA580C', fillColor: '#F39C12', fillOpacity: 0.2, interactive: false }).addTo(ty.now);
+      if (r.ty) L.circle(at, { radius: r.ty * 1000, stroke: true, weight: 1.5, color: '#DC2626', fillColor: '#E5342E', fillOpacity: 0.3, interactive: false }).addTo(ty.now);
+      L.marker(at, { icon: tyEyeIcon(cat[2]), interactive: false, zIndexOffset: 900 }).addTo(ty.now);
+      renderTyCard();
+    }
+
+    function drawTyStatic() {
+      const g = groups.tytrack;
+      g.clearLayers();
+      g.addLayer(ty.now);
+      const st = ty.steps, fc = st.filter((s) => s.k >= 0);
+      // cone of uncertainty: left and right edges of the forecast track
+      const left = [], right = [];
+      fc.forEach((s, i) => {
+        const nx = fc[i + 1] || null, b = nx ? bearingTo(s, nx) : bearingTo(fc[i - 1], s);
+        const r = Math.max(s.coneKm, 30);
+        const a = destPoint(s, b - 90, r), c = destPoint(s, b + 90, r);
+        left.push([a.lat, a.lng]); right.push([c.lat, c.lng]);
+      });
+      L.polygon(left.concat(right.reverse()), { stroke: true, weight: 1, color: '#DC2626', dashArray: '3 5', fillColor: '#DC2626', fillOpacity: 0.1, interactive: false }).addTo(g);
+      const ll = (s) => [s.lat, s.lng];
+      L.polyline(st.filter((s) => s.k <= 0).map(ll), { color: '#17181A', weight: 3.5, opacity: 0.85, interactive: false }).addTo(g);
+      L.polyline(fc.map(ll), { color: '#17181A', weight: 3, opacity: 0.85, dashArray: '8 7', interactive: false }).addTo(g);
+      st.forEach((s) => {
+        L.circleMarker(ll(s), { radius: s.k === 0 ? 6 : 4.5, weight: 1.5, color: '#fff', fillColor: tyCat(s.wind)[2], fillOpacity: 1, interactive: false }).addTo(g);
+        if (s.k % 2 === 0 && s.k !== 0) {
+          L.marker(ll(s), { interactive: false, icon: L.divIcon({ className: 'bm-pin-wrap', iconSize: [0, 0],
+            html: `<span class="bm-wx-label bm-ty-lbl">${tyClock(s.time)}</span>` }) }).addTo(g);
+        }
+      });
+    }
+
+    function tyYou(s) {
+      if (!user) return null;
+      const d = API.distanceKm(user, s), r = tyRings(s.wind);
+      const lv = d < r.ty ? (s.wind >= 185 ? 5 : 4) : d < r.storm ? 3 : d < r.gale ? 2 : d < r.gale * 1.5 ? 1 : 0;
+      return { d, lv };
+    }
+
+    function renderTyCard() {
+      if (!ty.steps) return;
+      const s = ty.steps[ty.k - TY_FROM], cat = tyCat(s.wind), you = tyYou(s);
+      const label = ty.k === 0 ? 'Now' : (ty.k > 0 ? '+' : '−') + Math.abs(ty.k * TY_STEP_H) + ' h';
+      let near = '';
+      if (user) {
+        const best = ty.steps.filter((x) => x.k >= 0).map((x) => ({ x, d: API.distanceKm(user, x) })).sort((a, b) => a.d - b.d)[0];
+        near = `<div><small>Closest to you</small><b>${tyClock(best.x.time)}</b><span>${fmtKm(best.d)} away</span></div>`;
+      }
+      tyCard.innerHTML = `
+        <div class="bm-ty-head"><span class="bm-ty-title"><i class="bm-ty-dot" style="background:${cat[2]}"></i>Typhoon <b>&ldquo;Demo&rdquo;</b></span>
+          <span class="bm-badge bm-ty-demo">DEMO</span>
+          <button type="button" data-off aria-label="Hide typhoon tracker">×</button></div>
+        <div class="bm-ty-stats">
+          <div><small>${label} · ${esc(tyClock(s.time))}</small><b style="color:${cat[2] === '#F4D03F' ? '#8a6d00' : cat[2]}">${cat[1]}</b><span>Winds ${s.wind} km/h, gusts ${s.gust}</span></div>
+          <div><small>Pressure</small><b>${s.hPa} hPa</b><span>Moving ${compass(s.heading)} · 22 km/h</span></div>
+          ${you ? `<div><small>Your area</small><b>${you.d < 1 ? '<1' : Math.round(you.d)} km</b><span>${tcwsPill(you.lv)} (rough)</span></div>` : `<div><small>Your area</small><b>—</b><span>Turn on location</span></div>`}
+          ${near}
+        </div>
+        <div class="bm-ty-ctl">
+          <button type="button" class="bm-btn bm-btn-green" data-ty="play">${ty.timer ? 'Pause' : 'Play'}</button>
+          <input type="range" min="${TY_FROM}" max="${TY_TO}" step="1" value="${ty.k}" aria-label="Storm time" data-ty="slide">
+        </div>
+        <div class="bm-ty-key"><i style="background:#F4D03F"></i>Gale 63+ <i style="background:#F39C12"></i>Storm 89+ <i style="background:#E5342E"></i>Typhoon 118+ <i class="cone"></i>Possible path</div>
+        <p class="bm-ty-note">Made-up storm for practice, not a real forecast. Real tracks: PAGASA bulletins.</p>`;
+    }
+
+    function setTyStep(k) { ty.k = Math.max(TY_FROM, Math.min(TY_TO, k)); drawTyNow(); }
+    function stopTyPlay() { clearInterval(ty.timer); ty.timer = null; }
+    function playTy() {
+      if (ty.timer) { stopTyPlay(); renderTyCard(); return; }
+      if (ty.k >= TY_TO) ty.k = TY_FROM - 1;
+      ty.timer = setInterval(() => {
+        if (ty.k >= TY_TO) { stopTyPlay(); renderTyCard(); return; }
+        setTyStep(ty.k + 1);
+      }, 1000);
+      setTyStep(ty.k + 1);
+    }
+    tyCard.addEventListener('click', (e) => {
+      if (e.target.closest('[data-off]')) { setOverlay('none'); return; }
+      if (e.target.closest('[data-ty="play"]')) playTy();
+    });
+    tyCard.addEventListener('input', (e) => {
+      if (e.target.matches('[data-ty="slide"]')) { stopTyPlay(); setTyStep(parseInt(e.target.value, 10)); }
+    });
+
+    function showTyphoon() {
+      const at = user ? { lat: user.lat, lng: user.lng } : map.getCenter();
+      ty.steps = buildDemoTyphoon(at);
+      ty.k = 0;
+      stopTyPlay();
+      drawTyStatic();
+      drawTyNow();
+      tyCard.hidden = false;
+      sheetCollapsed = true;                       // fold the layer panel down to its title so the track stays visible
+      sheet.classList.add('is-collapsed');
+      const hd = sheet.querySelector('.bm-sheet-head');
+      if (hd) hd.setAttribute('aria-expanded', 'false');
+      const b = L.latLngBounds(ty.steps.map((s) => [s.lat, s.lng]));
+      const fit = () => map.fitBounds(b.pad(0.25), { paddingTopLeft: [10, 130], paddingBottomRight: [64, tyCard.offsetHeight + (sheet.hidden ? 0 : sheet.offsetHeight) + 50], animate: false, maxZoom: 9 });
+      fit();
+      requestAnimationFrame(fit);
+    }
+    function hideTyphoon() {
+      stopTyPlay();
+      tyCard.hidden = true;
+      groups.tytrack.clearLayers();
+      groups.tytrack.addLayer(ty.now);
+      ty.now.clearLayers();
     }
 
     /* ---- dropped pin / search ---- */
