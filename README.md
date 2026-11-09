@@ -22,3 +22,26 @@ Loaded from OpenStreetMap for the visible area: official evacuation centers / as
 ## Route A to B and editing your location
 - Route panel: **From (A)** and **To (B)** rows, each with a Change button. Pick a point by tapping the map, dragging the pin or searching a place. Swap A and B with the arrows. B can also be reset to the safest nearby evacuation site.
 - Every full map has an **Edit my location** button under the map-style button. Set your position by hand (blue/amber dot turns amber) or tap **Use GPS** to go back to automatic.
+
+## Fresh data and no-signal use
+- A bar under the search box shows **Last updated: x ago**. Tap it to update now.
+- While online, evacuation sites, the forecast and river data refresh automatically every hour (and when signal returns).
+- Each answer is saved in the browser. With no signal the saved copy keeps drawing and the bar turns amber ("Offline. Saved 2 hours ago").
+- Evacuation sites have a **Details** panel: type, safety of the ground, facilities (only what OpenStreetMap lists, otherwise "Not listed"), contact, what to bring.
+
+## Faster evacuation search, cancel and redo
+- Two Overpass mirrors are raced (the second starts after 3.5 s or on failure) and the first good answer wins. Official centers, schools and halls draw as soon as they arrive.
+- A search covering the view that is under an hour old is answered instantly from the saved copy.
+- The bar under the search box shows progress with **Cancel**; after a cancel, failure or empty result it offers **Search again / Try again**. The Evacuation panel also has **Redo search**.
+
+## Accounts
+Accounts are stored in this browser (passwords salted and hashed with SHA-256), so they survive a reload. Replace with a real backend before launch.
+
+## Built-in backup list of evacuation sites
+`!js/evac-backup.js` holds a saved list of sites. The app uses it only when the live search fails, or comes back empty, and no saved copy exists. Build or refresh it (needs internet) with:
+
+    node tools/build-evac-backup.js                 # all areas in the script
+    node tools/build-evac-backup.js "Guiuan"        # one town
+    node tools/build-evac-backup.js --bbox 14.60,121.07,14.70,121.13 --name "My barangay"
+
+The script is set up for Samar (Balangiga, Borongan, Guiuan, Oras, Dolores, Basey, Marabut, Catbalogan, Calbayog). Add more towns to the `AREAS` list at the top. Sites from the backup are marked as possibly out of date.

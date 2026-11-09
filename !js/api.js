@@ -1,10 +1,23 @@
 const BayanihanAPI = (() => {
 
   // In-memory "database" — replaced by a real DB once a backend exists.
+  // Accounts are kept in this browser (localStorage) so they survive a page reload. Passwords
+  // are stored as a salted SHA-256 hash, never as plain text. A real backend replaces all of this.
+  const USERS_KEY = 'bm.users.v1';
+  const loadUsers = () => { try { const u = JSON.parse(localStorage.getItem(USERS_KEY)); return Array.isArray(u) ? u : []; } catch (e) { return []; } };
   const db = {
-    users: [],       // { id, name, email, password }
-    incidents: [],   // { id, userId, lat, lng, createdAt }
+    users: loadUsers(),   // { id, name, email, hash, location? }
+    incidents: [],        // { id, userId, lat, lng, createdAt }
   };
+  const saveUsers = () => { try { localStorage.setItem(USERS_KEY, JSON.stringify(db.users)); } catch (e) { /* storage blocked or full */ } };
+  async function hashPassword(email, password) {
+    const text = 'bayanihan-ready|' + email + '|' + password;
+    try {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return 'sha256:' + Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) { return 'plain:' + text; }     // crypto.subtle needs https or localhost
+  }
+  const cleanEmail = (e) => String(e || '').trim().toLowerCase();
 
   let sessionUser = null; // the "logged in" user for this tab/session
 
@@ -41,6 +54,7 @@ const BayanihanAPI = (() => {
   async function fetchJSON(url, options = {}, timeoutMs = 15000) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    if (options.signal) options.signal.addEventListener('abort', () => ctrl.abort());
     try {
       const res = await fetch(url, { ...options, signal: ctrl.signal });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -50,18 +64,48 @@ const BayanihanAPI = (() => {
     }
   }
 
-  async function overpass(query) {
-    let lastErr;
-    for (const url of OVERPASS_URLS) {
-      try {
-        return await fetchJSON(url, {
+  // Overpass servers are slow and flaky. Ask the first mirror; if it has not answered within
+  // 3.5 s (or fails) ask the next one as well. The first good answer wins and the rest are
+  // cancelled. An outside AbortSignal cancels everything (rejects with err.cancelled).
+  function overpass(query, { signal } = {}) {
+    return new Promise((resolve, reject) => {
+      const ctls = [];
+      let done = false; let started = 0; let failed = 0; let timer = null; let lastErr;
+      const finish = (fn, v) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        ctls.forEach((c) => c.abort());
+        if (signal) signal.removeEventListener('abort', onAbort);
+        fn(v);
+      };
+      const onAbort = () => finish(reject, Object.assign(new Error('cancelled'), { cancelled: true }));
+      if (signal) { if (signal.aborted) { onAbort(); return; } signal.addEventListener('abort', onAbort); }
+      const next = () => {
+        if (done || started >= OVERPASS_URLS.length) return;
+        const url = OVERPASS_URLS[started++];
+        const ctl = new AbortController();
+        ctls.push(ctl);
+        fetchJSON(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(query),
-        }, 25000);
-      } catch (err) { lastErr = err; }
-    }
-    throw lastErr;
+          signal: ctl.signal,
+        }, (typeof window !== 'undefined' && window.BAYANIHAN_OVERPASS_TIMEOUT_MS) || 20000).then((d) => {
+          // Overpass answers HTTP 200 with a "remark" when the query timed out or ran out of memory.
+          if (d && d.remark && /timed out|out of memory|runtime error/i.test(d.remark) && !(d.elements && d.elements.length)) throw new Error(d.remark);
+          finish(resolve, d);
+        }).catch((err) => {
+          if (done) return;
+          lastErr = err; failed++;
+          if (failed >= OVERPASS_URLS.length) finish(reject, lastErr);
+          else { clearTimeout(timer); next(); }
+        });
+        clearTimeout(timer);
+        timer = setTimeout(next, (typeof window !== 'undefined' && window.BAYANIHAN_HEDGE_MS) || 3500);
+      };
+      next();
+    });
   }
 
   const toRad = (d) => (d * Math.PI) / 180;
@@ -92,7 +136,7 @@ const BayanihanAPI = (() => {
     96: 'Thunderstorm with hail', 99: 'Thunderstorm with hail',
   };
 
-  return {
+  const api = {
 
     /* ---------------------------------------------------------------
        SIGN UP
@@ -105,23 +149,24 @@ const BayanihanAPI = (() => {
          return res.json();
     --------------------------------------------------------------- */
     async signUp({ name, email, password }) {
-      await delay();
+      await delay(250);
+      name = String(name || '').trim().replace(/\s+/g, ' ');
+      email = cleanEmail(email);
+      password = String(password || '');
 
-      if (!name || !email || !password) {
-        return { success: false, error: 'Please fill in every field.' };
-      }
-      if (!isValidEmail(email)) {
-        return { success: false, error: 'Please enter a valid email address.' };
-      }
-      if (password.length < 8) {
-        return { success: false, error: 'Password must be at least 8 characters.' };
-      }
-      if (db.users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-        return { success: false, error: 'An account with that email already exists.' };
+      if (!name) return { success: false, field: 'name', error: 'Please enter your full name.' };
+      if (name.length < 2) return { success: false, field: 'name', error: 'Your name looks too short.' };
+      if (!email) return { success: false, field: 'email', error: 'Please enter your email address.' };
+      if (!isValidEmail(email)) return { success: false, field: 'email', error: 'That email address doesn\u2019t look right. Example: juan@email.com' };
+      if (!password) return { success: false, field: 'password', error: 'Please choose a password.' };
+      if (password.length < 8) return { success: false, field: 'password', error: 'Password must be at least 8 characters.' };
+      if (db.users.some((u) => u.email === email)) {
+        return { success: false, field: 'email', error: 'An account with that email already exists. Try logging in instead.' };
       }
 
-      const user = { id: uid(), name, email, password };
+      const user = { id: uid(), name, email, hash: await hashPassword(email, password) };
       db.users.push(user);
+      saveUsers();
       sessionUser = user;
 
       return { success: true, user: { id: user.id, name: user.name, email: user.email } };
@@ -132,18 +177,18 @@ const BayanihanAPI = (() => {
        Real version: POST /api/auth/login
     --------------------------------------------------------------- */
     async logIn({ email, password }) {
-      await delay();
+      await delay(250);
+      email = cleanEmail(email);
+      password = String(password || '');
 
-      if (!isValidEmail(email)) {
-        return { success: false, error: 'Please enter a valid email address.' };
-      }
+      if (!email) return { success: false, field: 'email', error: 'Please enter your email address.' };
+      if (!isValidEmail(email)) return { success: false, field: 'email', error: 'That email address doesn\u2019t look right. Example: juan@email.com' };
+      if (!password) return { success: false, field: 'password', error: 'Please enter your password.' };
 
-      const user = db.users.find(
-        (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-      );
-
-      if (!user) {
-        return { success: false, error: 'Incorrect email or password.' };
+      const user = db.users.find((u) => u.email === email);
+      if (!user) return { success: false, field: 'email', error: 'No account found with that email. Sign up first.' };
+      if (user.hash !== await hashPassword(email, password)) {
+        return { success: false, field: 'password', error: 'Incorrect password. Please try again.' };
       }
 
       sessionUser = user;
@@ -175,7 +220,7 @@ const BayanihanAPI = (() => {
     --------------------------------------------------------------- */
     async saveLocation({ lat, lng }) {
       await delay(300);
-      if (sessionUser) sessionUser.location = { lat, lng };
+      if (sessionUser) { sessionUser.location = { lat, lng }; saveUsers(); }
       return { success: true };
     },
 
@@ -231,10 +276,11 @@ const BayanihanAPI = (() => {
        one) and any capacity / phone / hours / address tags.
        Real version: GET /api/evacuation-centers?bbox=
     --------------------------------------------------------------- */
-    async getEvacuationCenters({ south, west, north, east }) {
+    async getEvacuationCenters({ south, west, north, east }, opts = {}) {
       try {
         const box = `${south},${west},${north},${east}`;
         // Two light queries run in parallel (one heavy query often times out on the public servers).
+        const LIGHT = typeof window !== 'undefined' && window.BAYANIHAN_LIGHT_QUERY;   // the backup builder does not need outlines
         const NAMEHEALTH = 'health (center|centre|station)|rural health|RHU|BHS|barangay health';
         const qCore = `[out:json][timeout:30];
           (
@@ -245,7 +291,7 @@ const BayanihanAPI = (() => {
             nwr["amenity"="community_centre"](${box});
             nwr["amenity"="school"]["name"](${box});
           );
-          out geom tags 300;`;
+          out ${LIGHT ? 'center' : 'geom'} tags 300;`;
         const qMore = `[out:json][timeout:30];
           (
             nwr["amenity"~"^(clinic|doctors|health_post|social_facility)$"]["name"~"${NAMEHEALTH}|evacuation|barangay",i](${box});
@@ -254,11 +300,8 @@ const BayanihanAPI = (() => {
             nwr["leisure"="sports_centre"]["name"](${box});
             nwr["building"="gymnasium"]["name"](${box});
           );
-          out geom tags 200;`;
-        const settled = await Promise.allSettled([overpass(qCore), overpass(qMore)]);
-        const ok = settled.filter((r) => r.status === 'fulfilled');
-        if (!ok.length) throw settled[0].reason;
-        const data = { elements: ok.flatMap((r) => r.value.elements || []) };
+          out ${LIGHT ? 'center' : 'geom'} tags 200;`;
+        const toCenters = (elements) => {
         const seen = new Set();
         const centers = [];
         const KIND_LABEL = {
@@ -276,7 +319,7 @@ const BayanihanAPI = (() => {
         };
         const HEALTH = /health (center|centre|station)|rural health|\brhu\b|\bbhs\b|barangay health/i;
         const BRGY_HALL = /(barangay|brgy\.?) ?(hall|multi|covered|center|centre)|barangay hall/i;
-        for (const el of data.elements) {
+        for (const el of elements) {
           const t = el.tags || {};
           let pos = null;
           let outline = null;
@@ -314,16 +357,44 @@ const BayanihanAPI = (() => {
             label: kind === 'hall' && BRGY_HALL.test(name) ? 'Barangay hall' : (kind === 'assembly' && (t.emergency === 'evacuation_center' || t.evacuation_center === 'yes' || /evacuation (center|centre)/i.test(name))) ? 'Evacuation center' : KIND_LABEL[kind],
             official: kind === 'assembly' || /evacuation/i.test(name),
             capacity: t.capacity || null,
-            phone: t.phone || t['contact:phone'] || null,
+            phone: t.phone || t['contact:phone'] || t['contact:mobile'] || null,
             hours: t.opening_hours || null,
             address: address || null,
+            website: t.website || t['contact:website'] || null,
+            operator: t.operator || null,
+            access: t.access || null,                       // public / private / customers ...
+            wheelchair: t.wheelchair || null,               // yes / limited / no
+            levels: t['building:levels'] || null,
+            note: t.description || t.note || null,
+            // Only what OpenStreetMap actually lists; anything missing is shown as "not listed", never assumed.
+            facilities: {
+              toilets: t.toilets || null,
+              water: t.drinking_water || null,
+              power: t.backup_generator || t.generator || null,
+              internet: t.internet_access || null,
+              shower: t.shower || null,
+              beds: t.beds || null,
+              medical: kind === 'health' ? 'yes' : (t.healthcare ? 'yes' : null),
+            },
             outline,
             ...pos,
           });
         }
-        return { success: true, centers };
+        return centers;
+        };
+        // Start both searches now. The first one is the important one (official centers,
+        // schools, halls), so draw it as soon as it arrives instead of waiting for the second.
+        const pCore = overpass(qCore, { signal: opts.signal });
+        const pMore = overpass(qMore, { signal: opts.signal });
+        if (opts.onPartial) pCore.then((d) => opts.onPartial(toCenters(d.elements || []))).catch(() => {});
+        const settled = await Promise.allSettled([pCore, pMore]);
+        if (opts.signal && opts.signal.aborted) return { success: false, cancelled: true, centers: [] };
+        const ok = settled.filter((r) => r.status === 'fulfilled');
+        if (!ok.length) throw settled[0].reason;
+        return { success: true, centers: toCenters(ok.flatMap((r) => r.value.elements || [])), partial: ok.length < 2 };
       } catch (err) {
-        return { success: false, error: 'Could not load evacuation sites.', centers: [] };
+        if (err && err.cancelled) return { success: false, cancelled: true, centers: [] };
+        return { success: false, error: "Could not load evacuation sites.", centers: [] };
       }
     },
 
@@ -647,4 +718,84 @@ const BayanihanAPI = (() => {
       return { success: true, incidents: mine };
     },
   };
+
+  /* ---------------------------------------------------------------
+     SAVED COPIES for no-signal moments.
+     Every successful map-data answer (evacuation sites, forecast, rivers, responders) is
+     kept in the browser. If the network later fails, the last copy is returned with
+     { stale: true, updatedAt } so the map can still draw and say how old it is.
+  --------------------------------------------------------------- */
+  const CACHE_KEY = 'bm.cache.v2';
+  const readCache = () => { try { return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; } catch (e) { return {}; } };
+  const writeCache = (c) => {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(c)); }
+    catch (e) { try { c.evac = (c.evac || []).slice(-2); localStorage.setItem(CACHE_KEY, JSON.stringify(c)); } catch (e2) { /* storage full or blocked */ } }
+  };
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const SIMPLE = {
+    getWeatherOutlook: (a) => `wx:${r2(a.lat)},${r2(a.lng)}`,
+    getRiverOutlook: (a) => `river:${r2(a.lat)},${r2(a.lng)}`,
+    getNearbyResponders: (a) => `resp:${r2(a.lat)},${r2(a.lng)}`,
+  };
+  Object.entries(SIMPLE).forEach(([name, keyOf]) => {
+    const orig = api[name].bind(api);
+    api[name] = async (args = {}) => {
+      const key = keyOf(args);
+      const res = await orig(args);
+      const c = readCache();
+      c.simple = c.simple || {};
+      if (res && res.success) {
+        const now = Date.now();
+        c.simple[key] = { t: now, res };
+        const keys = Object.keys(c.simple);
+        if (keys.length > 24) keys.sort((a, b) => c.simple[a].t - c.simple[b].t).slice(0, keys.length - 24).forEach((k) => delete c.simple[k]);
+        writeCache(c);
+        return { ...res, updatedAt: now, stale: false };
+      }
+      const hit = c.simple[key];
+      return hit ? { ...hit.res, updatedAt: hit.t, stale: true } : res;
+    };
+  });
+  {
+    const orig = api.getEvacuationCenters.bind(api);
+    const inBox = (p, b) => p.lat >= b.south && p.lat <= b.north && p.lng >= b.west && p.lng <= b.east;
+    // Built-in list (!js/evac-backup.js): used only when live search fails or finds nothing.
+    const backupFor = (box) => {
+      const b = window.BAYANIHAN_EVAC_BACKUP;
+      if (!b || !Array.isArray(b.sites) || !b.sites.length) return null;
+      const centers = b.sites.filter((s) => inBox(s, box)).map((s) => ({ outline: null, facilities: {}, ...s, fromBackup: true }));
+      return centers.length ? { success: true, centers, stale: true, backup: true, updatedAt: b.generated ? Date.parse(b.generated) : null } : null;
+    };
+    api.getEvacuationCenters = async (box, opts = {}) => {
+      const c = readCache();
+      c.evac = c.evac || [];
+      // 1) A saved search under an hour old that covers this view answers instantly.
+      if (!opts.fresh) {
+        const hit = c.evac.find((e) => !e.partial && e.centers.length && Date.now() - e.t < 3600000 && e.box[0] <= box.south && e.box[1] <= box.west && e.box[2] >= box.north && e.box[3] >= box.east);
+        if (hit) return { success: true, centers: hit.centers.filter((s) => inBox(s, box)), updatedAt: hit.t, stale: false, cached: true };
+      }
+      const res = await orig(box, opts);
+      if (res.cancelled) return res;
+      if (res && res.success && !res.centers.length) return backupFor(box) || res;   // empty is often a timeout
+      if (res && res.success) {
+        const now = Date.now();
+        if (!res.partial && res.centers.length) {        // an empty answer is often a timeout: never save it
+          c.evac = c.evac.filter((e) => !(e.box[0] >= box.south && e.box[1] >= box.west && e.box[2] <= box.north && e.box[3] <= box.east));   // replaces smaller older searches
+          c.evac.push({ t: now, box: [box.south, box.west, box.north, box.east], centers: res.centers });
+          c.evac = c.evac.slice(-6);
+          writeCache(c);
+        }
+        return { ...res, updatedAt: now, stale: false };
+      }
+      // 2) Network failed: rebuild from every saved area that overlaps this view, however old.
+      const near = c.evac.filter((e) => e.box[0] < box.north && e.box[2] > box.south && e.box[1] < box.east && e.box[3] > box.west);
+      if (!near.length) return backupFor(box) || res;
+      const seen = new Set();
+      const centers = [];
+      near.forEach((e) => e.centers.forEach((s) => { if (!seen.has(s.id)) { seen.add(s.id); centers.push(s); } }));
+      return { success: true, centers, stale: true, updatedAt: Math.min(...near.map((e) => e.t)) };
+    };
+  }
+
+  return api;
 })();

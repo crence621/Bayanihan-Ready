@@ -6,6 +6,9 @@
 
   function showScreen(name) {
     screens.forEach((s) => s.classList.toggle('is-active', s.dataset.screen === name));
+    if (name === 'signup' || name === 'login') {          // start each visit with a clean form
+      document.querySelectorAll('.form-error').forEach((x) => { if (x.id === 'signup-error' || x.id === 'login-error') { x.hidden = true; x.textContent = ''; } });
+    }
   }
 
   // Any element with data-goto="screenName" navigates on click.
@@ -31,52 +34,73 @@
     return `${fmt(lat)}°${lat >= 0 ? 'N' : 'S'}  ${fmt(lng)}°${lng >= 0 ? 'E' : 'W'}`;
   }
 
-  /* ------------------------------- SIGN UP ------------------------------- */
+  /* --------------------------- SIGN UP / LOGIN ---------------------------- */
   const signupForm = document.getElementById('signup-form');
   const signupError = document.getElementById('signup-error');
-
-  signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    setError(signupError, '');
-    const submitBtn = signupForm.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-
-    const data = Object.fromEntries(new FormData(signupForm).entries());
-    const result = await BayanihanAPI.signUp(data);
-
-    submitBtn.disabled = false;
-
-    if (!result.success) {
-      setError(signupError, result.error);
-      return;
-    }
-
-    applyUserToUI(result.user);
-    showScreen('location');
-  });
-
-  /* -------------------------------- LOGIN -------------------------------- */
   const loginForm = document.getElementById('login-form');
   const loginError = document.getElementById('login-error');
 
-  loginForm.addEventListener('submit', async (e) => {
+  // Show / hide password buttons
+  document.querySelectorAll('.auth-form input[type="password"]').forEach((input) => {
+    const wrap = input.closest('.input-wrap');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pw-toggle';
+    btn.textContent = 'Show';
+    btn.setAttribute('aria-label', 'Show password');
+    btn.addEventListener('click', () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Hide' : 'Show';
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    });
+    wrap.appendChild(btn);
+    input.classList.add('has-toggle');
+  });
+
+  function clearFieldErrors(form) { form.querySelectorAll('input').forEach((i) => i.removeAttribute('aria-invalid')); }
+  // Show the message and put the cursor on the field that needs fixing.
+  function failForm(form, errorEl, result) {
+    setError(errorEl, result.error);
+    clearFieldErrors(form);
+    const input = result.field && form.querySelector(`[name="${result.field}"]`);
+    if (input) { input.setAttribute('aria-invalid', 'true'); input.focus(); }
+  }
+  [signupForm, loginForm].forEach((f) => f.addEventListener('input', (e) => {
+    e.target.removeAttribute('aria-invalid');
+    setError(f === signupForm ? signupError : loginError, '');
+  }));
+
+  // One handler for both forms: never leaves the button stuck, whatever happens.
+  function wireAuth(form, errorEl, call, busyText, onDone) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      setError(errorEl, '');
+      clearFieldErrors(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const label = submitBtn.textContent;
+      if (submitBtn.disabled) return;           // double tap / double Enter
+      submitBtn.disabled = true;
+      submitBtn.textContent = busyText;
+      try {
+        const result = await call(Object.fromEntries(new FormData(form).entries()));
+        if (!result.success) { failForm(form, errorEl, result); return; }
+        applyUserToUI(result.user);
+        await onDone(result);
+      } catch (err) {
+        setError(errorEl, 'Something went wrong. Please try again.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = label;
+      }
+    });
+  }
+  wireAuth(signupForm, signupError, (d) => BayanihanAPI.signUp(d), 'Creating account…', async () => { showScreen('location'); });
+  wireAuth(loginForm, loginError, (d) => BayanihanAPI.logIn(d), 'Logging in…', async () => { await enterHome(); });
+
+  document.getElementById('forgot-link').addEventListener('click', (e) => {
     e.preventDefault();
-    setError(loginError, '');
-    const submitBtn = loginForm.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-
-    const data = Object.fromEntries(new FormData(loginForm).entries());
-    const result = await BayanihanAPI.logIn(data);
-
-    submitBtn.disabled = false;
-
-    if (!result.success) {
-      setError(loginError, result.error);
-      return;
-    }
-
-    applyUserToUI(result.user);
-    await enterHome();
+    setError(loginError, 'Password reset isn’t available yet. If you can’t log in, create a new account with a different email.');
   });
 
   function applyUserToUI(user) {
@@ -99,41 +123,56 @@
   const coordsReadout = document.getElementById('coords-readout');
   const locationError = document.getElementById('location-error');
 
-  allowLocationBtn.addEventListener('click', () => {
+  // Use a position (GPS or chosen by hand) and move on to Home.
+  async function useStartLocation(lat, lng, accuracy, manual) {
+    coordsReadout.hidden = false;
+    coordsReadout.textContent = formatCoords(lat, lng);
+    await BayanihanAPI.saveLocation({ lat, lng });
+    if (BM) {
+      if (manual) BM.setManualPosition({ lat, lng });
+      else { BM.setUserPosition({ lat, lng, accuracy }); BM.startTracking().catch(() => {}); }   // keep the blue dot live
+    }
+    const homeCoords = document.getElementById('home-coords');
+    homeCoords.hidden = false;
+    homeCoords.textContent = formatCoords(lat, lng);
+    await enterHome();
+  }
+
+  function getPosition(opts) {
+    return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, opts));
+  }
+
+  allowLocationBtn.addEventListener('click', async () => {
+    setError(locationError, '');
     if (!('geolocation' in navigator)) {
-      setError(locationError, 'Location isn\u2019t available on this device/browser.');
+      setError(locationError, 'This device or browser can’t share its location. Set it on the map instead.');
       return;
     }
-
     allowLocationBtn.disabled = true;
     allowLocationBtn.textContent = 'Locating…';
+    try {
+      let pos;
+      try { pos = await getPosition({ enableHighAccuracy: true, timeout: 8000 }); }
+      catch (err) {
+        if (err && err.code === 1) throw err;                      // permission denied: don't retry
+        pos = await getPosition({ enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });   // indoors: accept a rough fix
+      }
+      await useStartLocation(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, false);
+    } catch (err) {
+      const denied = err && err.code === 1;
+      setError(locationError, denied
+        ? 'Location permission is blocked. Allow it in your browser settings, or set your location on the map.'
+        : 'Couldn’t get a GPS fix. Move near a window and try again, or set your location on the map.');
+    } finally {
+      allowLocationBtn.disabled = false;
+      allowLocationBtn.textContent = 'Allow';
+    }
+  });
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        coordsReadout.hidden = false;
-        coordsReadout.textContent = formatCoords(latitude, longitude);
-        await BayanihanAPI.saveLocation({ lat: latitude, lng: longitude });
-        if (BM) {
-          BM.setUserPosition({ lat: latitude, lng: longitude, accuracy: pos.coords.accuracy });
-          BM.startTracking().catch(() => {}); // keep the blue dot live
-        }
-
-        const homeCoords = document.getElementById('home-coords');
-        homeCoords.hidden = false;
-        homeCoords.textContent = formatCoords(latitude, longitude);
-
-        allowLocationBtn.disabled = false;
-        allowLocationBtn.textContent = 'Allow';
-        await enterHome();
-      },
-      () => {
-        allowLocationBtn.disabled = false;
-        allowLocationBtn.textContent = 'Allow';
-        setError(locationError, 'Permission denied.');
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+  document.getElementById('skip-location').addEventListener('click', () => enterHome());
+  document.getElementById('set-location-manual').addEventListener('click', () => {
+    setError(locationError, '');
+    openLocationSheet(setupLocTarget);
   });
 
   /* --------------------------------- HOME --------------------------------- */
@@ -716,6 +755,10 @@
   const pickerLabel = document.getElementById('picker-label');
   const confirmLocBtn = document.getElementById('confirm-location-btn');
 
+  // Hidden target used when the person sets their location from the first-run location screen.
+  const setupLocTarget = document.createElement('span');
+  setupLocTarget.hidden = true;
+  document.body.appendChild(setupLocTarget);
   let locationSheetTarget = reportLocText;
   let picker = null;        // created the first time the sheet opens
   let pickedCoords = null;
@@ -841,6 +884,7 @@
       setLocation(locationSheetTarget, { lat: c.lat, lng: c.lng, text: parts.join(', ') || pickerAddress.textContent || formatCoords(c.lat, c.lng), manual: true });
     }
     closeLocationSheet();
+    if (c && locationSheetTarget === setupLocTarget) useStartLocation(c.lat, c.lng, 20, true);
   });
 
   // Search a Philippine place or address (button, Enter key, or after a short pause in typing).

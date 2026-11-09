@@ -558,7 +558,7 @@ const BayanihanMaps = (() => {
     else bits.push(`Higher ground (${t.elev} m)`);
     if (slide >= 2) bits.push(`steep slope (${t.slope}°), landslide risk`);
     else if (slide === 1) bits.push(`sloping (${t.slope}°)`);
-    return { flood, slide, text: bits.join(', '), known: true };
+    return { flood, slide, text: bits.join(', '), known: true, elev: t.elev, slope: t.slope };
   }
 
   /* ---------------------------- popups ---------------------------- */
@@ -571,6 +571,22 @@ const BayanihanMaps = (() => {
     health: '<path d="M5 1.5h4V5h3.5v4H9v3.5H5V9H1.5V5H5z"/>',
   };
   const KIND_NAME = { assembly: 'Evacuation centers', shelter: 'Shelter', hall: 'Barangay halls', school: 'Public schools', gym: 'Gyms', health: 'Health centers' };
+
+  // Plain-language notes per site type, shown in the details panel.
+  const KIND_INFO = {
+    assembly: { about: 'An official evacuation center or assembly point. Local government (LGU / barangay) opens these in an emergency and usually keeps a list of who is inside.', expect: 'Registration at the entrance, relief goods and a place to stay. Space and supplies depend on how many families arrive.' },
+    school: { about: 'A public school. Schools are the most common evacuation centers in the Philippines because classrooms and covered courts can shelter many families.', expect: 'Families are usually placed by classroom. Toilets are normally available. Ask the barangay or the school head before you go, because some buildings are only opened on an official order.' },
+    hall: { about: 'A barangay hall or community center. This is the local government\u2019s base: the best place to register, ask for help and get official updates.', expect: 'Mostly a coordination point. It may have limited room to stay, so staff can direct you to a nearby center.' },
+    health: { about: 'A public health center (RHU / barangay health station). It can give first aid and basic care and refer serious cases.', expect: 'Go here for medical needs, medicine or injuries, not for long stays. Space for sleeping is limited.' },
+    gym: { about: 'A gym or covered court. It has a large open floor that can hold many families, and it is often used when classrooms are full.', expect: 'Open floor with little privacy. Bring your own mat and blanket. Check that the roof is sound and the area is not flooded.' },
+    shelter: { about: 'A mapped shelter. Confirm who runs it and whether it is open to the public.', expect: 'Basic cover only. Ask the barangay what is available.' },
+  };
+  const BRING = ['Valid ID and important papers in a waterproof bag', 'Drinking water and ready-to-eat food for at least 3 days', 'Medicines and a first-aid kit', 'Phone, power bank and a flashlight', 'Blanket or mat, spare clothes, face mask', 'Cash in small bills', 'Baby, elderly and pet needs'];
+  const yn = (v) => {
+    if (v == null || v === '') return null;
+    const t = String(v).toLowerCase();
+    return t === 'yes' || t === 'true' ? 'Yes' : t === 'no' ? 'No' : t === 'limited' ? 'Limited' : String(v);
+  };
 
   const walkMin = (km) => Math.max(1, Math.round((km / 4.5) * 60));
   const fmtKm = (km) => (km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km');
@@ -602,7 +618,8 @@ const BayanihanMaps = (() => {
     if (c.address) lines.push(esc(c.address));
     const extra = riskHtml(c.risk, !c.risk) +
       (lines.length ? `<div class="bm-pop-meta">${lines.join('<br>')}</div>` : '') +
-      '<div class="bm-pop-meta bm-pop-warn">Mapped from OpenStreetMap. Confirm with your barangay / LGU.</div>';
+      '<div class="bm-pop-meta bm-pop-warn">Mapped from OpenStreetMap. Confirm with your barangay / LGU.</div>' +
+      `<button type="button" class="bm-detail-btn" data-id="${esc(c.id)}">Full details</button>`;
     return placePopup(c, extra);
   }
 
@@ -721,6 +738,7 @@ const BayanihanMaps = (() => {
     let routeProfile = 'foot';
     let pendingDest = null;
     let routeFromPt = null;         // point A chosen by hand (null = my location)
+    let detailId = null;            // evacuation site shown in the details panel
     let pick = null;                // place picker: { purpose: 'me' | 'A' | 'B', ll, name, marker }
     const loaded = { evac: null, water: null };
     let lastResp = null;
@@ -765,8 +783,95 @@ const BayanihanMaps = (() => {
     L.DomEvent.disableClickPropagation(sheet);
     L.DomEvent.disableScrollPropagation(sheet);
 
+    /* ---- "Last updated" bar + hourly refresh ----
+       Map data (evacuation sites, forecast, rivers) is saved in the browser by the API layer.
+       While there is signal it is refreshed every hour; with no signal the saved copy keeps
+       drawing and this bar says how old it is. */
+    const REFRESH_MS = o.refreshMs || 60 * 60 * 1000;
+    const FRESH_KEY = 'bm.freshAt';
+    let freshAt = null;
+    try { freshAt = +localStorage.getItem(FRESH_KEY) || null; } catch (e) { /* storage blocked */ }
+    let dataStale = false;
+    let updating = false;
+    let lastTry = 0;
+    const statusEl = document.createElement('button');
+    statusEl.type = 'button';
+    statusEl.className = 'bm-status';
+    statusEl.title = 'Tap to update now';
+    host.appendChild(statusEl);
+    const online = () => navigator.onLine !== false;
+    function ago(t) {
+      const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+      if (m < 1) return 'just now';
+      if (m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+      const h = Math.round(m / 60);
+      if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+      const d = Math.round(h / 24);
+      return d + (d === 1 ? ' day ago' : ' days ago');
+    }
+    function paintStatus() {
+      let text; let cls;
+      if (updating) { text = 'Updating map data…'; cls = 'is-busy'; }
+      else if (!online() || dataStale) {
+        text = freshAt ? `Offline. Saved ${ago(freshAt)}` : 'Offline. No saved data yet';
+        cls = 'is-stale';
+      } else if (freshAt) { text = `Last updated: ${ago(freshAt)}`; cls = Date.now() - freshAt > 2 * REFRESH_MS ? 'is-old' : 'is-ok'; }
+      else { text = 'Waiting for the first update…'; cls = 'is-busy'; }
+      statusEl.className = 'bm-status ' + cls;
+      statusEl.innerHTML = `<i></i><span>${text}</span>${online() && !updating ? '<em>Update</em>' : ''}`;
+    }
+    // called with the result of each network-backed load
+    function trackData(res) {
+      if (!res) return;
+      if (res.success && !res.stale) {
+        freshAt = res.updatedAt || Date.now();
+        dataStale = false;
+        try { localStorage.setItem(FRESH_KEY, String(freshAt)); } catch (e) { /* ignore */ }
+      } else {
+        dataStale = true;
+        if (res.success && res.stale && res.updatedAt) freshAt = res.updatedAt;   // age of the saved copy being shown
+      }
+      paintStatus();
+    }
+    async function refreshData(manual) {
+      if (updating) return;
+      lastTry = Date.now();
+      if (!online()) {
+        paintStatus();
+        if (manual) { info('No signal. Showing the last saved map data.', 'warn'); setTimeout(() => info(''), 4000); }
+        return;
+      }
+      updating = true;
+      paintStatus();
+      try {
+        loaded.evac = null;
+        evacFresh = true;
+        outlook = null;
+        const jobs = [run(true), loadOutlook()];
+        const c = map.getCenter();
+        const loadsEvac = mode === 'evacuation' || mode === 'route' || showEvac;
+        if (!loadsEvac && map.getSize().x && map.getZoom() >= 12) jobs.push(API.getEvacuationCenters(toBox(map.getBounds().pad(0.15)), { fresh: true }).then(trackData));
+        await Promise.allSettled(jobs);
+      } finally { updating = false; paintStatus(); }
+    }
+    statusEl.addEventListener('click', () => refreshData(true));
+    window.addEventListener('online', () => refreshData(false));
+    window.addEventListener('offline', paintStatus);
+    // every 30 s: keep "x min ago" honest and refresh when an hour has passed
+    const statusTimer = setInterval(() => {
+      if (!host.isConnected) { clearInterval(statusTimer); return; }
+      paintStatus();
+      if (online() && !document.hidden && Date.now() - lastTry >= REFRESH_MS) refreshData(false);
+    }, o.tickMs || 30000);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && online() && Date.now() - lastTry >= REFRESH_MS) refreshData(false);
+    });
+    paintStatus();
+    setTimeout(() => { if (online() && (!freshAt || Date.now() - freshAt >= REFRESH_MS) && !updating) refreshData(false); }, 1200);
+
+
     function setSheet(headHtml, bodyHtml) {
-      if (pick) return;                       // the place picker owns the bottom while it is open
+      if (pick || detailId) return;           // the place picker / site details own the map while open
       const prevScroll = sheet.querySelector('.bm-scroll');
       const keepLeft = prevScroll ? prevScroll.scrollLeft : 0;
       sheet.hidden = false;
@@ -1016,43 +1121,102 @@ const BayanihanMaps = (() => {
           <h4>${esc(c.name)}</h4>
           <p class="bm-card-meta">${fmtKm(c.distKm)} · ~${walkMin(c.distKm)} min walk${refIsUser() ? '' : ' from map center'}</p>
           ${riskLine(c)}
-          <button type="button" class="bm-card-go" data-act="route" data-id="${esc(c.id)}">Route here</button>
+          <div class="bm-card-btns"><button type="button" class="bm-card-go" data-act="route" data-id="${esc(c.id)}">Route here</button><button type="button" class="bm-card-go bm-card-alt" data-act="detail" data-id="${esc(c.id)}">Details</button></div>
         </article>`).join('');
       const head = `<span class="bm-title"><i class="bm-dot evac"></i>Evacuation sites <b>${all.length}</b></span>
         <span class="bm-sub">${refIsUser() ? 'Nearest first' : 'Tap ◎ to sort by your location'} \u00b7 green areas are safe zones</span>`;
       const body = all.length
-        ? `<div class="bm-chips">${chips}<button type="button" class="bm-chip bm-chip-fit" data-act="fitall">Show all</button></div>
+        ? `<div class="bm-chips">${chips}<button type="button" class="bm-chip bm-chip-fit" data-act="fitall">Show all</button><button type="button" class="bm-chip bm-chip-fit" data-act="redoevac">Redo search</button></div>
            <div class="bm-scroll">${cards || '<p class="bm-empty">None of this type here.</p>'}</div>`
-        : '<p class="bm-empty">No evacuation sites are mapped in this view yet. Pan or zoom out a little.</p>';
+        : `<p class="bm-empty">${evacState.kind === 'busy' ? 'Searching\u2026' : 'No evacuation sites are mapped in this view yet. Pan, zoom out, or search again.'}</p>
+           <div class="bm-empty-btns">${evacState.kind === 'busy' ? '<button type="button" class="bm-btn" data-act="cancelevac">Cancel</button>' : '<button type="button" class="bm-btn bm-btn-green" data-act="redoevac">Search this area again</button>'}</div>`;
       setSheet(head, body);
       const selCard = sheet.querySelector('.bm-card.is-sel');
       if (selCard) selCard.scrollIntoView({ block: 'nearest', inline: 'center' });
     }
 
-    // quiet: loading them in the background under another layer, so no messages or panel changes
+    /* ---- evacuation search: progress, cancel and redo ---- */
+    let evacCtl = null;       // AbortController of the search in flight
+    let evacSeq = 0;          // newer searches replace older ones
+    let evacFresh = false;    // next search must skip the saved copy (redo / hourly refresh)
+    let evacState = { kind: 'idle', msg: '' };
+    const evacBar = document.createElement('div');
+    evacBar.className = 'bm-evacbar';
+    evacBar.hidden = true;
+    evacBar.setAttribute('role', 'status');
+    host.appendChild(evacBar);
+    L.DomEvent.disableClickPropagation(evacBar);
+
+    function paintEvacBar() {
+      const relevant = mode === 'evacuation' || mode === 'route' || showEvac;
+      const k = evacState.kind;
+      if (!relevant || k === 'idle' || pick || detailId) { evacBar.hidden = true; return; }
+      const label = k === 'busy' ? 'Cancel' : k === 'failed' ? 'Try again' : 'Search again';
+      evacBar.hidden = false;
+      evacBar.className = 'bm-evacbar is-' + k;
+      evacBar.innerHTML = `<i></i><span>${esc(evacState.msg)}</span><button type="button" data-eb="${k === 'busy' ? 'cancel' : 'redo'}">${label}</button>`;
+    }
+    function setEvacState(kind, msg = '') { evacState = { kind, msg }; paintEvacBar(); }
+    function cancelEvac() { if (evacCtl) evacCtl.abort(); }
+    function redoEvac() {
+      evacFresh = true;
+      loaded.evac = null;
+      loadEvac(true, () => false, !(mode === 'evacuation' || mode === 'route'));
+    }
+    evacBar.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-eb]');
+      if (!b) return;
+      if (b.dataset.eb === 'cancel') cancelEvac(); else redoEvac();
+    });
+
+    // quiet: loading them in the background under another layer, so no panel changes
     async function loadEvac(force, stale, quiet) {
-      if (map.getZoom() < 12) { info('Zoom in to see evacuation sites.', 'warn'); if (!quiet) renderSheet(); return; }
+      if (map.getZoom() < 12) { setEvacState('idle'); info('Zoom in to see evacuation sites.', 'warn'); if (!quiet) renderSheet(); return; }
       const view = map.getBounds();
       if (!force && loaded.evac && loaded.evac.contains(view)) { annotateDistances(); if (!quiet) renderSheet(); else if (!groups.evac.getLayers().length) drawEvac(); return; }
-      info('Finding evacuation sites…', 'busy');
-      const area = view.pad(0.15);
-      let res = await API.getEvacuationCenters(toBox(area));
-      if (!res.success && !stale()) { await new Promise((r) => setTimeout(r, 1500)); if (stale()) return; res = await API.getEvacuationCenters(toBox(area)); }   // public servers are flaky: retry once
-      if (stale()) return;
+      if (evacCtl) evacCtl.abort();                      // a newer search replaces the older one
+      const ctl = new AbortController();
+      evacCtl = ctl;
+      const seq = ++evacSeq;
+      const fresh = evacFresh; evacFresh = false;
+      setEvacState('busy', 'Finding evacuation sites…');
+      let area = view.pad(0.15);
+      // Keep the search area modest (about 11 km across): huge areas time out on the public servers.
+      const MAXSPAN = 0.1;
+      const ctr = area.getCenter();
+      if (area.getNorth() - area.getSouth() > MAXSPAN || area.getEast() - area.getWest() > MAXSPAN) {
+        area = L.latLngBounds([ctr.lat - MAXSPAN / 2, ctr.lng - MAXSPAN / 2], [ctr.lat + MAXSPAN / 2, ctr.lng + MAXSPAN / 2]);
+      }
+      const apply = (centers) => {
+        const oldRisk = new Map(evacItems.map((c) => [c.id, c.risk]));
+        evacItems = centers.map((c) => ({ ...c, risk: oldRisk.get(c.id) || null }));
+        annotateDistances();
+        drawEvac();
+        if (!quiet) renderSheet();
+        annotateTerrain(stale);
+      };
+      const res = await API.getEvacuationCenters(toBox(area), {
+        signal: ctl.signal,
+        fresh,
+        onPartial: (centers) => { if (seq === evacSeq && !ctl.signal.aborted && !stale() && centers.length) { apply(centers); setEvacState('busy', 'Finding more sites…'); } },
+      });
+      if (seq !== evacSeq) return;                       // replaced by a newer search
+      evacCtl = null;
+      if (res.cancelled) { setEvacState('cancelled', 'Search cancelled.'); if (!quiet) renderSheet(); return; }
+      if (stale()) { setEvacState('idle'); return; }
+      trackData(res);
       if (!res.success) {
-        info('Evacuation sites could not load. Tap the layers button to retry, or pan the map.', 'error');
         loaded.evac = null;
+        setEvacState('failed', 'Could not load evacuation sites. Check your signal.');
         if (!quiet) renderSheet();
         return;
       }
-      info(res.centers.length ? '' : 'No mapped evacuation sites here yet. Try zooming out or moving the map.', res.centers.length ? '' : 'warn');
-      loaded.evac = area;
-      const oldRisk = new Map(evacItems.map((c) => [c.id, c.risk]));
-      evacItems = res.centers.map((c) => ({ ...c, risk: oldRisk.get(c.id) || null }));
-      annotateDistances();
-      drawEvac();
-      if (!quiet) renderSheet();
-      annotateTerrain(stale);
+      loaded.evac = res.centers.length ? area : null;   // an empty result is retried on the next move
+      apply(res.centers);
+      if (!res.centers.length) setEvacState('empty', 'No mapped evacuation sites in this area.');
+      else if (res.backup) setEvacState('partial', 'Live search unavailable. Showing the built-in site list.');
+      else if (res.partial) setEvacState('partial', 'Some results may be missing.');
+      else setEvacState('idle');
     }
 
     async function loadResponders(force, stale) {
@@ -1100,6 +1264,7 @@ const BayanihanMaps = (() => {
       info('Checking the forecast\u2026', 'busy');
       try {
         const [w, riv] = await Promise.all([API.getWeatherOutlook(pt), API.getRiverOutlook(pt)]);
+        trackData(w);
         if (!w.success) { info(w.error, 'error'); return; }
         info('');
         outlook = { at: pt, time: Date.now(), weather: w, river: riv.success ? riv : null };
@@ -1425,6 +1590,7 @@ const BayanihanMaps = (() => {
     }
 
     function renderSheet() {
+      paintEvacBar();
       if (mode === 'reports') { reportsSheet(); return; }
       if (mode === 'evacuation') evacSheet();
       else if (mode === 'route') routeSheet();
@@ -1491,6 +1657,9 @@ const BayanihanMaps = (() => {
       }
       else if (act === 'goto') setMode(t.dataset.m);
       else if (act === 'pick') openPicker(t.dataset.p);
+      else if (act === 'detail') openSiteDetail(t.dataset.id);
+      else if (act === 'redoevac') redoEvac();
+      else if (act === 'cancelevac') cancelEvac();
       else if (act === 'swap') swapAB();
       else if (act === 'autob') { routeTo(null); }
       else if (act === 'profile') { routeProfile = t.dataset.p; if (route && route.dest) routeTo(route.dest, true); else { renderSheet(); } }
@@ -1513,6 +1682,8 @@ const BayanihanMaps = (() => {
     // Capture phase: Leaflet popups swallow bubbling clicks, and popup content is
     // swapped after address lookups, so a per-popup listener would be lost.
     el.addEventListener('click', (e) => {
+      const dbtn = e.target.closest && e.target.closest('.bm-detail-btn');
+      if (dbtn) { e.preventDefault(); map.closePopup(); openSiteDetail(dbtn.dataset.id); return; }
       const btn = e.target.closest && e.target.closest('.bm-route-btn');
       if (!btn) return;
       e.preventDefault();
@@ -1520,6 +1691,94 @@ const BayanihanMaps = (() => {
       if (btn.classList.contains('bm-report-btn')) { if (o.onOpenReport) o.onOpenReport(btn.dataset.id); return; }
       routeTo({ lat: +btn.dataset.lat, lng: +btn.dataset.lng, name: btn.dataset.name, id: btn.dataset.id || undefined });
     }, true);
+
+    /* ---- evacuation site details panel ---- */
+    const detailEl = document.createElement('section');
+    detailEl.className = 'bm-detail';
+    detailEl.hidden = true;
+    detailEl.setAttribute('aria-label', 'Evacuation site details');
+    host.appendChild(detailEl);
+    L.DomEvent.disableClickPropagation(detailEl);
+    L.DomEvent.disableScrollPropagation(detailEl);
+
+    function openSiteDetail(id) {
+      const c = evacItems.find((x) => x.id === id) || (route && route.dest && route.dest.id === id ? route.dest : null);
+      if (!c) return;
+      map.closePopup();
+      detailId = id;
+      selectedId = id;
+      host.classList.add('is-picking');
+      hideSheet();
+      const info = KIND_INFO[c.kind] || KIND_INFO.shelter;
+      const r = c.risk && c.risk.known ? c.risk : null;
+      const lv = r ? Math.max(r.flood, r.slide) : 0;
+      const status = c.official
+        ? '<span class="bm-badge ok">Designated evacuation center</span>'
+        : '<span class="bm-badge warn">Possible shelter. Not confirmed as an evacuation center</span>';
+      const km = c.distKm != null ? c.distKm : null;
+      const f = c.facilities || {};
+      const fac = [
+        ['Toilets', yn(f.toilets)], ['Drinking water', yn(f.water)], ['Backup power', yn(f.power)],
+        ['Internet', yn(f.internet)], ['Showers', yn(f.shower)], ['Wheelchair access', yn(c.wheelchair)],
+        ['Medical care', f.medical ? 'Yes' : null],
+      ].map(([k, v]) => `<li class="${v === 'Yes' ? 'is-yes' : v === 'No' ? 'is-no' : v ? '' : 'is-unk'}"><span>${k}</span><b>${esc(v || 'Not listed')}</b></li>`).join('');
+      const tel = c.phone ? c.phone.replace(/[^+\d]/g, '') : '';
+      const contact = [
+        c.address ? `<li><span>Address</span><b>${esc(c.address)}</b></li>` : '',
+        c.hours ? `<li><span>Hours</span><b>${esc(c.hours)}</b></li>` : '',
+        c.operator ? `<li><span>Run by</span><b>${esc(c.operator)}</b></li>` : '',
+        c.access ? `<li><span>Access</span><b>${esc(c.access)}</b></li>` : '',
+        c.levels ? `<li><span>Floors</span><b>${esc(c.levels)}</b></li>` : '',
+        c.phone ? `<li><span>Phone</span><b><a href="tel:${esc(tel)}">${esc(c.phone)}</a></b></li>` : '',
+        c.website ? `<li><span>Website</span><b><a href="${esc(c.website)}" target="_blank" rel="noopener noreferrer">${esc(c.website.replace(/^https?:\/\//, '').slice(0, 40))}</a></b></li>` : '',
+      ].join('');
+      detailEl.innerHTML = `
+        <div class="bm-detail-head">
+          <button type="button" class="bm-detail-back" data-dt="back" aria-label="Back to the map">←</button>
+          <div><span class="bm-kind k-${c.kind}">${esc(c.label)}</span><h3>${esc(c.name)}</h3></div>
+        </div>
+        <div class="bm-detail-body">
+          ${status}
+          <div class="bm-stats">
+            <div><b>${km != null ? fmtKm(km) : '--'}</b><span>${refIsUser() ? 'from you' : 'from map center'}</span></div>
+            <div><b>${km != null ? '~' + walkMin(km) + ' min' : '--'}</b><span>on foot</span></div>
+            <div><b>${c.capacity ? esc(c.capacity) : 'Not listed'}</b><span>capacity</span></div>
+          </div>
+          <h4>Is it safe from floods and slides?</h4>
+          ${r ? `<div class="bm-pop-risk r${lv}">${esc(r.text)}</div>
+            <p class="bm-d-note">${r.flood >= 2 ? 'Floodwater can reach this ground. Go here early, or choose a higher site nearby.' : r.slide >= 2 ? 'The slope here is steep. Avoid it during heavy rain and pick a flatter site.' : 'The ground around this site is higher and fairly flat, which is a good sign. Always follow your LGU’s advice.'}</p>`
+            : '<p class="bm-d-note">Checking ground height…</p>'}
+          <h4>About this place</h4>
+          <p class="bm-d-note">${esc(info.about)}</p>
+          <p class="bm-d-note"><b>What to expect:</b> ${esc(info.expect)}</p>
+          ${c.note ? `<p class="bm-d-note"><b>Mapped note:</b> ${esc(c.note)}</p>` : ''}
+          <h4>Facilities</h4>
+          <ul class="bm-d-list bm-d-fac">${fac}</ul>
+          ${contact ? `<h4>Contact and access</h4><ul class="bm-d-list">${contact}</ul>` : ''}
+          <h4>What to bring</h4>
+          <ul class="bm-d-bring">${BRING.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
+          <p class="bm-d-src">${c.fromBackup ? 'From the built-in site list saved with the app, so it may be out of date. ' : ''}Source: OpenStreetMap volunteers. Details marked "Not listed" are unknown, not unavailable. Distance is a straight line. Call your barangay or LGU to confirm the site is open before you travel.</p>
+        </div>
+        <div class="bm-detail-actions">
+          ${tel ? `<a class="bm-btn" href="tel:${esc(tel)}">Call</a>` : ''}
+          <button type="button" class="bm-btn bm-btn-green" data-dt="route" data-id="${esc(c.id)}">Route here</button>
+        </div>`;
+      detailEl.hidden = false;
+      detailEl.querySelector('.bm-detail-body').scrollTop = 0;
+    }
+    function closeDetail() {
+      if (!detailId) return;
+      detailId = null;
+      detailEl.hidden = true;
+      host.classList.remove('is-picking');
+      renderSheet();
+    }
+    detailEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dt]');
+      if (!b) return;
+      if (b.dataset.dt === 'back') { const id = detailId; closeDetail(); if (id) focusSite(id); }
+      else if (b.dataset.dt === 'route') { const id = b.dataset.id; closeDetail(); const c = evacItems.find((x) => x.id === id); if (c) routeTo({ lat: c.lat, lng: c.lng, name: c.name, id: c.id }); }
+    });
 
     /* ---- place picker: edit my location, or choose point A / B of a route ---- */
     const abIcon = (letter) => L.divIcon({ className: 'bm-pin-wrap', html: `<span class="bm-ab-pin ${letter === 'A' ? 'a' : 'b'}">${letter}</span>`, iconSize: [30, 38], iconAnchor: [15, 36] });
@@ -2011,7 +2270,7 @@ const BayanihanMaps = (() => {
       locate,
       setBase,
       setOverlay,
-      setShowEvac(v) { showEvac = !!v; applyLayers(); if (showEvac) loadEvac(true, () => false, true); },
+      setShowEvac(v) { showEvac = !!v; paintEvacBar(); applyLayers(); if (showEvac) loadEvac(true, () => false, true); },
       focusPoint(lat, lng, z = 16) { touched = true; map.setView(aim([lat, lng], z), z, { animate: false }); },
       // switch to the Reports layer and open one report's pin
       focusReport(id) {
