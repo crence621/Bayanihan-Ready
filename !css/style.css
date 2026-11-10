@@ -2957,3 +2957,29 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 .bm-ty-spin { transform-origin: 27px 27px; animation: bm-ty-rot 3.2s linear infinite; }
 @keyframes bm-ty-rot { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .bm-ty-spin { animation: none; } }
+
+/* ---- Evacuation site capacity ---- */
+.bm-cap { margin: 4px 0 6px; }
+.bm-cap-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bm-cap-pill { padding: 2px 8px; border-radius: 9px; font-size: 10px; font-weight: 800; background: #DCFCE7; color: #14532D; }
+.bm-cap.is-filling .bm-cap-pill { background: #FEF3C7; color: #78350F; }
+.bm-cap.is-full .bm-cap-pill, .bm-cap.is-closed .bm-cap-pill { background: #DC2626; color: #fff; }
+.bm-cap.is-unknown .bm-cap-pill { background: #E5E7EB; color: #374151; }
+.bm-cap-txt { font-size: 11px; color: #374151; }
+.bm-cap-bar { height: 6px; border-radius: 4px; background: #E5E7EB; margin-top: 4px; overflow: hidden; }
+.bm-cap-bar i { display: block; height: 100%; background: #16A34A; border-radius: 4px; }
+.bm-cap.is-filling .bm-cap-bar i { background: #F59E0B; }
+.bm-cap.is-full .bm-cap-bar i { background: #DC2626; }
+.bm-evac-pin.cap-full, .bm-evac-pin.cap-closed { filter: grayscale(.85) brightness(.9); opacity: .9; }
+.bm-evac-pin.cap-filling .bm-evac-badge { box-shadow: 0 0 0 2px #F59E0B; }
+.bm-full-tag { position: absolute; left: 50%; top: -9px; transform: translateX(-50%); padding: 1px 6px; border-radius: 6px; background: #DC2626; color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .05em; white-space: nowrap; }
+.bm-card-go.is-full { background: #fff; color: #B91C1C; border: 1.5px solid #DC2626; }
+.bm-linkbtn { border: none; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; cursor: pointer; }
+.bm-capform { margin: 10px 0; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 10px; }
+.bm-capform summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+.bm-capform summary em { display: block; font-style: normal; font-weight: 400; font-size: 10.5px; color: #6B7280; }
+.bm-capfields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.bm-capfields label { display: flex; flex-direction: column; font-size: 11px; color: #374151; gap: 3px; }
+.bm-capfields input[type=number] { padding: 8px; border: 1px solid #D1D5DB; border-radius: 8px; font: inherit; font-size: 14px; }
+.bm-capclosed { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.bm-capbtns { display: flex; gap: 8px; margin-top: 8px; }

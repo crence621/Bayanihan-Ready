@@ -652,12 +652,22 @@ const BayanihanMaps = (() => {
     return `<div class="bm-pop-risk r${lv}">${esc(r.text)}</div>`;
   };
 
+  /* ---- capacity / full status ---- */
+  const capSt = (c) => BayanihanCapacity.status(c);
+  const capFull = (c) => BayanihanCapacity.isFull(c);
+  function capBar(c) {
+    const st = capSt(c);
+    if (st.state === 'unknown' && !st.capacity) return '';
+    const w = st.pct == null ? 0 : st.pct;
+    return `<div class="bm-cap is-${st.state}"><div class="bm-cap-row"><span class="bm-cap-pill">${BayanihanCapacity.label(st)}</span><span class="bm-cap-txt">${esc(BayanihanCapacity.line(st))}</span></div>` +
+      (st.pct != null ? `<div class="bm-cap-bar" role="img" aria-label="${w}% full"><i style="width:${w}%"></i></div>` : '') + '</div>';
+  }
+
   function sitePopup(c) {
     const lines = [];
-    if (c.capacity) lines.push(`Capacity: ${esc(c.capacity)}`);
     if (c.hours) lines.push(`Hours: ${esc(c.hours)}`);
     if (c.address) lines.push(esc(c.address));
-    const extra = riskHtml(c.risk, !c.risk) +
+    const extra = capBar(c) + riskHtml(c.risk, !c.risk) +
       (lines.length ? `<div class="bm-pop-meta">${lines.join('<br>')}</div>` : '') +
       '<div class="bm-pop-meta bm-pop-warn">Mapped from OpenStreetMap. Confirm with your barangay / LGU.</div>' +
       `<button type="button" class="bm-detail-btn" data-id="${esc(c.id)}">Full details</button>`;
@@ -668,13 +678,14 @@ const BayanihanMaps = (() => {
   function evacIcon(c, opts = {}) {
     const r = c.risk || {};
     const warn = Math.max(r.flood || 0, r.slide || 0) >= 2;
-    const cls = ['bm-evac-pin', 'k-' + c.kind, opts.nearest ? 'is-nearest' : '', opts.selected ? 'is-selected' : '', warn ? 'has-warn' : ''].join(' ');
+    const cls = ['bm-evac-pin', 'k-' + c.kind, opts.nearest ? 'is-nearest' : '', opts.selected ? 'is-selected' : '', warn ? 'has-warn' : '', 'cap-' + capSt(c).state].join(' ');
     const short = c.name.length > 24 ? c.name.slice(0, 23) + '…' : c.name;
     return L.divIcon({
       className: 'bm-pin-wrap',
       html: `<div class="${cls}"><span class="bm-evac-badge"><svg viewBox="0 0 14 14" width="19" height="19" fill="#fff" aria-hidden="true">${KIND_GLYPH[c.kind] || KIND_GLYPH.assembly}</svg></span>` +
         (warn ? '<i class="bm-warn" aria-hidden="true">!</i>' : '') +
         (opts.nearest ? '<b class="bm-near-tag">NEAREST</b>' : '') +
+        (capFull(c) ? `<b class="bm-full-tag">${capSt(c).state === 'closed' ? 'CLOSED' : 'FULL'}</b>` : '') +
         `<span class="bm-evac-label">${esc(short)}</span></div>`,
       iconSize: [44, 54], iconAnchor: [22, 49], popupAnchor: [0, -48],
     });
@@ -1109,12 +1120,12 @@ const BayanihanMaps = (() => {
 
     function filteredSites() {
       const f = evacFilter;
-      const list = evacItems.filter((c) => f === 'all' || (f === 'assembly' ? (c.kind === 'assembly' || c.kind === 'shelter') : c.kind === f));
+      const list = evacItems.filter((c) => f === 'all' || (f === 'space' ? !capFull(c) : f === 'assembly' ? (c.kind === 'assembly' || c.kind === 'shelter') : c.kind === f));
       return list.sort((a, b) => a.distKm - b.distKm);
     }
 
     function nearestId() {
-      const best = evacItems.slice().sort((a, b) => a.distKm - b.distKm)[0];
+      const best = evacItems.filter((c) => !capFull(c)).sort((a, b) => a.distKm - b.distKm)[0];   // full sites are never "nearest"
       return best ? best.id : null;
     }
 
@@ -1200,8 +1211,8 @@ const BayanihanMaps = (() => {
       const all = evacItems;
       const list = filteredSites();
       const near = refIsUser() ? nearestId() : null;
-      const count = (k) => all.filter((c) => (k === 'all' ? true : k === 'assembly' ? (c.kind === 'assembly' || c.kind === 'shelter') : c.kind === k)).length;
-      const chips = [['all', 'All'], ['assembly', 'Official centers'], ['school', 'Public schools'], ['hall', 'Barangay halls'], ['health', 'Health centers'], ['gym', 'Gyms']]
+      const count = (k) => all.filter((c) => (k === 'all' ? true : k === 'space' ? !capFull(c) : k === 'assembly' ? (c.kind === 'assembly' || c.kind === 'shelter') : c.kind === k)).length;
+      const chips = [['all', 'All'], ['space', 'Has space'], ['assembly', 'Official centers'], ['school', 'Public schools'], ['hall', 'Barangay halls'], ['health', 'Health centers'], ['gym', 'Gyms']]
         .filter(([k]) => k === 'all' || count(k))
         .map(([k, t]) => `<button type="button" class="bm-chip ${evacFilter === k ? 'is-on' : ''}" data-act="filter" data-k="${k}">${t} <em>${count(k)}</em></button>`)
         .join('');
@@ -1210,8 +1221,8 @@ const BayanihanMaps = (() => {
           <div class="bm-card-top"><span class="bm-kind k-${c.kind}">${esc(c.label)}</span>${c.id === near ? '<span class="bm-tag">Nearest</span>' : ''}</div>
           <h4>${esc(c.name)}</h4>
           <p class="bm-card-meta">${fmtKm(c.distKm)} · ~${walkMin(c.distKm)} min walk${refIsUser() ? '' : ' from map center'}</p>
-          ${riskLine(c)}
-          <div class="bm-card-btns"><button type="button" class="bm-card-go" data-act="route" data-id="${esc(c.id)}">Route here</button><button type="button" class="bm-card-go bm-card-alt" data-act="detail" data-id="${esc(c.id)}">Details</button></div>
+          ${capBar(c)}${riskLine(c)}
+          <div class="bm-card-btns"><button type="button" class="bm-card-go ${capFull(c) ? 'is-full' : ''}" data-act="route" data-id="${esc(c.id)}">${capFull(c) ? 'Full: route anyway' : 'Route here'}</button><button type="button" class="bm-card-go bm-card-alt" data-act="detail" data-id="${esc(c.id)}">Details</button></div>
         </article>`).join('');
       const head = `<span class="bm-title"><i class="bm-dot evac"></i>Evacuation sites <b>${all.length}</b></span>
         <span class="bm-sub">${refIsUser() ? 'Nearest first' : 'Tap ◎ to sort by your location'} \u00b7 green areas are safe zones</span>`;
@@ -1625,6 +1636,12 @@ const BayanihanMaps = (() => {
     }
 
     /* ================= ROUTE ================= */
+    function routeFullWarn() {
+      const d = route && route.dest, c = d && evacItems.find((x) => x.id === d.id);
+      if (!c || !capFull(c)) return '';
+      return `<p class="bm-risk r2">${esc(c.name)} is ${capSt(c).state === 'closed' ? 'closed' : 'full'}. <button type="button" class="bm-linkbtn" data-act="avoidfull">Find another site</button></p>`;
+    }
+
     function routeSheet() {
       const ab = abBlock();
       const profBtns = `<div class="bm-seg" role="group" aria-label="Travel mode">
@@ -1646,6 +1663,7 @@ const BayanihanMaps = (() => {
         <span class="bm-sub"><b>${r.durationMin} min</b> · ${r.distanceKm} km ${route.profile === 'foot' ? 'on foot' : 'by road'}</span>`;
       const body = `${ab}${profBtns}${alts}
         ${route.auto ? `<p class="bm-explain">${esc(route.auto)}</p>` : ''}
+        ${routeFullWarn()}
         ${route.fromGuess ? '<p class="bm-risk r1">Location is off, so this starts from the map center. Tap ◎ to start from where you are.</p>' : ''}
         ${hz}${steps}
         <div class="bm-actions"><button type="button" class="bm-btn" data-act="goto" data-m="evacuation">Other sites</button>
@@ -1700,12 +1718,21 @@ const BayanihanMaps = (() => {
 
     function pickSafeSite(from) {
       const sorted = evacItems.map((c) => ({ c, d: API.distanceKm(from, c) })).sort((a, b) => a.d - b.d);
-      const first = sorted[0] && sorted[0].c;
-      const pool = sorted.slice(0, 6).map((x) => x.c);
+      const open = sorted.filter((x) => !capFull(x.c));          // full and closed sites are skipped
+      const skipped = sorted.length - open.length;
+      if (!open.length) {
+        const dest = sorted[0] && sorted[0].c;
+        return { dest, auto: 'Every site nearby is full or closed. This goes to the closest one. Call the barangay first or look for another site.' };
+      }
+      const first = sorted[0].c;
+      const pool = open.slice(0, 6).map((x) => x.c);
       const safer = pool.find((c) => c.risk && c.risk.known && c.risk.flood <= 1 && c.risk.slide <= 1);
-      const dest = safer || first;
-      const auto = dest && first && dest.id !== first.id ? 'The closest site is on low or steep ground, so this goes to a safer one nearby.' : '';
-      return { dest, auto };
+      const dest = safer || open[0].c;
+      const why = [];
+      if (skipped && dest.id !== first.id && capFull(first)) why.push(`Skipped ${skipped} full or closed site${skipped > 1 ? 's' : ''}.`);
+      else if (dest.id !== first.id) why.push('The closest site is on low or steep ground, so this goes to a safer one nearby.');
+      if (safer && open[0].c.id !== safer.id && capFull(first)) why.push('Chose a safer one with room.');
+      return { dest, auto: why.join(' ') };
     }
 
     async function loadRoute(dest, stale) {
@@ -1877,6 +1904,7 @@ const BayanihanMaps = (() => {
       else if (act === 'cancelevac') cancelEvac();
       else if (act === 'swap') swapAB();
       else if (act === 'autob') { routeTo(null); }
+      else if (act === 'avoidfull') routeTo(null, true);
       else if (act === 'profile') { routeProfile = t.dataset.p; if (route && route.dest) routeTo(route.dest, true); else { renderSheet(); } }
       else if (act === 'alt') selectAlt(+t.dataset.i);
       else if (act === 'radar') toggleRadar();
@@ -1916,6 +1944,22 @@ const BayanihanMaps = (() => {
     L.DomEvent.disableClickPropagation(detailEl);
     L.DomEvent.disableScrollPropagation(detailEl);
 
+    function capForm(c) {
+      const st = capSt(c), mine = st.source === 'device';
+      const src = { device: 'Entered on this phone', barangay: 'From the barangay list shipped with the app', demo: 'Made-up numbers for the demo', osm: 'Size from OpenStreetMap, no headcount' }[st.source] || 'No headcount reported yet';
+      const when = st.updated ? ' \u00b7 ' + new Date(st.updated).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+      return `<details class="bm-capform"><summary>Update headcount <em>${esc(src + when)}</em></summary>
+        <p class="bm-d-note">For barangay or evacuation center staff. Full and closed sites are skipped when finding a route. Saved on this phone only; to share it with everyone, add it to <code>!js/evac-capacity.js</code>.</p>
+        <div class="bm-capfields">
+          <label>Capacity<input type="number" inputmode="numeric" min="1" data-cap="capacity" value="${st.capacity || ''}" placeholder="e.g. 300"></label>
+          <label>People inside now<input type="number" inputmode="numeric" min="0" data-cap="occupants" value="${st.occupants == null ? '' : st.occupants}" placeholder="e.g. 120"></label>
+        </div>
+        <label class="bm-capclosed"><input type="checkbox" data-cap="closed" ${st.closed ? 'checked' : ''}> Closed, not accepting people</label>
+        <div class="bm-capbtns"><button type="button" class="bm-btn bm-btn-green" data-dt="capsave" data-id="${esc(c.id)}">Save</button>
+          ${mine ? `<button type="button" class="bm-btn" data-dt="capclear" data-id="${esc(c.id)}">Reset</button>` : ''}</div>
+      </details>`;
+    }
+
     function openSiteDetail(id) {
       const c = evacItems.find((x) => x.id === id) || (route && route.dest && route.dest.id === id ? route.dest : null);
       if (!c) return;
@@ -1954,11 +1998,13 @@ const BayanihanMaps = (() => {
         </div>
         <div class="bm-detail-body">
           ${status}
+          ${capBar(c)}
           <div class="bm-stats">
             <div><b>${km != null ? fmtKm(km) : '--'}</b><span>${refIsUser() ? 'from you' : 'from map center'}</span></div>
             <div><b>${km != null ? '~' + walkMin(km) + ' min' : '--'}</b><span>on foot</span></div>
-            <div><b>${c.capacity ? esc(c.capacity) : 'Not listed'}</b><span>capacity</span></div>
+            <div><b>${capSt(c).capacity ? esc(capSt(c).capacity) : 'Not listed'}</b><span>capacity</span></div>
           </div>
+          ${capForm(c)}
           <h4>Is it safe from floods and slides?</h4>
           ${r ? `<div class="bm-pop-risk r${lv}">${esc(r.text)}</div>
             <p class="bm-d-note">${r.flood >= 2 ? 'Floodwater can reach this ground. Go here early, or choose a higher site nearby.' : r.slide >= 2 ? 'The slope here is steep. Avoid it during heavy rain and pick a flatter site.' : 'The ground around this site is higher and fairly flat, which is a good sign. Always follow your LGU’s advice.'}</p>`
@@ -1992,6 +2038,14 @@ const BayanihanMaps = (() => {
       const b = e.target.closest('[data-dt]');
       if (!b) return;
       if (b.dataset.dt === 'back') { const id = detailId; closeDetail(); if (id) focusSite(id); }
+      else if (b.dataset.dt === 'capsave' || b.dataset.dt === 'capclear') {
+        const id = b.dataset.id, q = (k) => detailEl.querySelector(`[data-cap="${k}"]`);
+        if (b.dataset.dt === 'capsave') BayanihanCapacity.set(id, { capacity: q('capacity').value, occupants: q('occupants').value, closed: q('closed').checked });
+        else BayanihanCapacity.clear(id);
+        drawEvac();
+        openSiteDetail(id);
+        const d = detailEl.querySelector('.bm-capform'); if (d) d.open = true;
+      }
       else if (b.dataset.dt === 'route') { const id = b.dataset.id; closeDetail(); const c = evacItems.find((x) => x.id === id); if (c) routeTo({ lat: c.lat, lng: c.lng, name: c.name, id: c.id }); }
     });
 
@@ -2702,6 +2756,7 @@ const BayanihanMaps = (() => {
         v = !!v;
         if (v === demo) return;
         demo = v;
+        BayanihanCapacity.setDemo(demo);
         if (demo) demoRun++;
         demoPill.hidden = !demo;
         outlook = null;
